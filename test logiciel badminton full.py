@@ -344,14 +344,37 @@ class ManagePlayersDialog(QDialog):
         self.setWindowTitle('Manage Players')
         self.setGeometry(150, 150, 700, 500)
         self.initUI()
+
+
+    def import_players_from_csv(self):
+        dialog = ImportPlayersDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.load_players()  # Reload players after importing
+            self.refresh_available_players()  # Refresh available players list
+
+    def export_players_info(self):
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, name, elo_rating FROM players')
+        players_data = cursor.fetchall()
+        conn.close()
+
+        file_path, _ = QFileDialog.getSaveFileName(self, 'Save File', '', 'CSV(*.csv)')
+        if file_path:
+            with open(file_path, 'w', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow(['ID', "Name", 'Elo Rating'])
+                for row in players_data:
+                    writer.writerow(row)
+            QMessageBox.information(self, 'Success', 'Players information exported successfully.')
     
     def initUI(self):
         layout = QVBoxLayout()
 
         # Players Table
         self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(['ID', 'Name', 'Elo Rating', 'Skill Level', 'Win Rate'])
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(['ID', 'Name', 'Elo Rating'])
         self.load_players()
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -363,25 +386,30 @@ class ManagePlayersDialog(QDialog):
         self.add_button.clicked.connect(self.add_player)
         self.remove_button = QPushButton('Remove Selected Player(s)')
         self.remove_button.clicked.connect(self.remove_players)
+        self.export_players_button = QPushButton('Export Players Info')
+        self.export_players_button.clicked.connect(self.export_players_info)
+        self.import_players_button = QPushButton('Import Players from CSV')
+        self.import_players_button.clicked.connect(self.import_players_from_csv)
         button_layout.addWidget(self.add_button)
         button_layout.addWidget(self.remove_button)
+        button_layout.addWidget(self.export_players_button)
+        button_layout.addWidget(self.import_players_button)
         layout.addLayout(button_layout)
-
         self.setLayout(layout)
     
     def load_players(self):
         conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
-        cursor.execute('SELECT id, name, elo_rating, skill_level FROM players')
+        cursor.execute('SELECT id, name, elo_rating FROM players')
         players = cursor.fetchall()
         conn.close()
 
         self.table.setRowCount(len(players))
-        for row_idx, (id_, name, elo, skill) in enumerate(players):
-            self.table.setItem(row_idx, 0, QTableWidgetItem(str(id_)))
+        for row_idx, (id, name, elo) in enumerate(players):
+            self.table.setItem(row_idx, 0, QTableWidgetItem(str(id)))
             self.table.setItem(row_idx, 1, QTableWidgetItem(name))
             self.table.setItem(row_idx, 2, QTableWidgetItem(str(round(elo, 2))))
-            self.table.setItem(row_idx, 3, QTableWidgetItem(skill))
+
 
     def add_player(self):
         dialog = AddPlayerDialog(self)
@@ -419,6 +447,71 @@ class ManagePlayersDialog(QDialog):
             cursor.execute('SELECT id, name, elo_rating, skill_level FROM players')
             players = cursor.fetchall()
             conn.close()
+
+
+
+class ImportPlayersDialog(QDialog):
+
+    def initUI(self):
+        layout = QVBoxLayout()
+
+        self.file_label = QLabel('Select CSV File:')
+        self.file_path = QLineEdit()
+        self.browse_button = QPushButton('Browse')
+        self.browse_button.clicked.connect(self.browse_file)
+
+        file_layout = QHBoxLayout()
+        file_layout.addWidget(self.file_path)
+        file_layout.addWidget(self.browse_button)
+        layout.addWidget(self.file_label)
+        layout.addLayout(file_layout)
+
+        self.import_button = QPushButton('Import Players')
+        self.import_button.clicked.connect(self.import_players)
+        layout.addWidget(self.import_button)
+
+        self.setLayout(layout)
+    
+    def browse_file(self):
+        file_name, _ = QFileDialog.getOpenFileName(self, 'Open CSV File', '', 'CSV Files (*.csv)')
+        if file_name:
+            self.file_path.setText(file_name)
+    
+    def import_players(self):
+        file_path = self.file_path.text().strip()
+        if not file_path:
+            QMessageBox.warning(self, 'Input Error', 'Please select a CSV file.')
+            return
+
+        try:
+            with open(file_path, newline='') as csvfile:
+                reader = csv.DictReader(csvfile)
+                conn = sqlite3.connect(DATABASE)
+                cursor = conn.cursor()
+                for row in reader:
+                    name = row['name'].strip()
+                    skill_level = row.get('skill_level', 'Beginner').strip()
+
+                    # Assign initial Elo rating based on skill level
+                    if skill_level == 'Beginner':
+                        elo = 1300
+                    elif skill_level == 'Intermediate':
+                        elo = 1500
+                    else:
+                        elo = 1700
+
+                    cursor.execute('''
+                        INSERT OR IGNORE INTO players (name, elo_rating, skill_level)
+                        VALUES (?, ?, ?, ?)
+                    ''', (name, elo, skill_level))
+                conn.commit()
+                conn.close()
+            QMessageBox.information(self, 'Success', 'Players imported successfully.')
+            self.accept()
+        except Exception as e:
+            QMessageBox.critical(self, 'Error', f'Failed to import players.\nError: {str(e)}')
+             
+
 
 class AddPlayerDialog(QDialog):
     def __init__(self, parent=None):
@@ -913,6 +1006,11 @@ class LeaderboardWindow(QDialog):
         self.load_leaderboard()
         layout.addWidget(self.table)
 
+        # Add export button
+        self.export_button = QPushButton('Export Leaderboard')
+        self.export_button.clicked.connect(self.export_leaderboard)
+        layout.addWidget(self.export_button)
+
         self.setLayout(layout)
     
     def load_leaderboard(self):
@@ -923,6 +1021,20 @@ class LeaderboardWindow(QDialog):
             self.table.setItem(row_idx, 1, QTableWidgetItem(str(round(elo,2))))
             self.table.setItem(row_idx, 2, QTableWidgetItem(str(mp)))
             self.table.setItem(row_idx, 3, QTableWidgetItem(wr))
+
+    def export_leaderboard(self):
+        file_path, _ = QFileDialog.getSaveFileName(self, 'Save File', '', 'CSV(*.csv)')
+        if file_path:
+            with open(file_path, 'w', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow(['Name', 'Elo Rating', 'Matchs Played', 'Win Rate'])
+                for row_idx in range(self.table.rowCount()):
+                    row_data = []
+                    for col_idx in range(self.table.columnCount()):
+                        item = self.table.item(row_idx, col_idx)
+                        row_data.append(item.text() if item else '')
+                    writer.writerow(row_data)
+            QMessageBox.information(self, 'Success', 'Leaderboard exported successfully.')
 
 class PerformanceTrackingWindow(QDialog):
     def __init__(self, parent=None):
@@ -935,8 +1047,8 @@ class PerformanceTrackingWindow(QDialog):
         layout = QVBoxLayout()
 
         self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(['Name', 'Elo Rating', 'Matches Played', 'Skill Level', 'Win Rate'])
+        self.table.setColumnCount(4)
+        self.table.setHorizontalHeaderLabels(['Name', 'Elo Rating', 'Matches Played', 'Win Rate'])
         self.load_performance_data()
         layout.addWidget(self.table)
 
@@ -951,72 +1063,6 @@ class PerformanceTrackingWindow(QDialog):
             self.table.setItem(row_idx, 2, QTableWidgetItem(str(mp)))
             self.table.setItem(row_idx, 3, QTableWidgetItem(skill))
             self.table.setItem(row_idx, 4, QTableWidgetItem(wr))
-
-class ImportPlayersDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Import Players from CSV')
-        self.setGeometry(150, 150, 500, 200)
-        self.initUI()
-    
-    def initUI(self):
-        layout = QVBoxLayout()
-
-        self.file_label = QLabel('Select CSV File:')
-        self.file_path = QLineEdit()
-        self.browse_button = QPushButton('Browse')
-        self.browse_button.clicked.connect(self.browse_file)
-
-        file_layout = QHBoxLayout()
-        file_layout.addWidget(self.file_path)
-        file_layout.addWidget(self.browse_button)
-        layout.addWidget(self.file_label)
-        layout.addLayout(file_layout)
-
-        self.import_button = QPushButton('Import Players')
-        self.import_button.clicked.connect(self.import_players)
-        layout.addWidget(self.import_button)
-
-        self.setLayout(layout)
-    
-    def browse_file(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, 'Open CSV File', '', 'CSV Files (*.csv)')
-        if file_name:
-            self.file_path.setText(file_name)
-    
-    def import_players(self):
-        file_path = self.file_path.text().strip()
-        if not file_path:
-            QMessageBox.warning(self, 'Input Error', 'Please select a CSV file.')
-            return
-
-        try:
-            with open(file_path, newline='') as csvfile:
-                reader = csv.DictReader(csvfile)
-                conn = sqlite3.connect(DATABASE)
-                cursor = conn.cursor()
-                for row in reader:
-                    name = row['name'].strip()
-                    skill_level = row.get('skill_level', 'Beginner').strip()
-
-                    # Assign initial Elo rating based on skill level
-                    if skill_level == 'Beginner':
-                        elo = 1300
-                    elif skill_level == 'Intermediate':
-                        elo = 1500
-                    else:
-                        elo = 1700
-
-                    cursor.execute('''
-                        INSERT OR IGNORE INTO players (name, elo_rating, skill_level)
-                        VALUES (?, ?, ?, ?)
-                    ''', (name, elo, skill_level))
-                conn.commit()
-                conn.close()
-            QMessageBox.information(self, 'Success', 'Players imported successfully.')
-            self.accept()
-        except Exception as e:
-            QMessageBox.critical(self, 'Error', f'Failed to import players.\nError: {str(e)}')
 
 
 class MatchHistoryWindow(QDialog):
@@ -1071,11 +1117,6 @@ class MainWindow(QMainWindow):
         self.manage_players_button = QPushButton('Manage Players')
         self.manage_players_button.clicked.connect(self.open_manage_players)
         layout.addWidget(self.manage_players_button)
-
-        # Import Players Button
-        self.import_players_button = QPushButton('Import Players from CSV')
-        self.import_players_button.clicked.connect(self.open_import_players)
-        layout.addWidget(self.import_players_button)
 
         # View Leaderboard Button
         self.leaderboard_button = QPushButton('View Leaderboard')
