@@ -385,8 +385,8 @@ class ManagePlayersDialog(QDialog):
     def add_player(self):
         dialog = AddPlayerDialog(self)
         if dialog.exec_() == QDialog.Accepted:
-            self.load_players()
-            # Optionally, emit a signal to refresh available players in ScheduleSessionDialog
+            self.load_players()  # Reload players after adding
+            self.refresh_available_players()  # Refresh available players list
 
     def remove_players(self):
         selected_rows = set()
@@ -410,6 +410,15 @@ class ManagePlayersDialog(QDialog):
             conn.close()
             QMessageBox.information(self, 'Success', 'Selected player(s) removed successfully.')
             self.load_players()
+            self.refresh_available_players()  # Refresh available players list after removal
+
+    def refresh_available_players(self):
+            conn = sqlite3.connect(DATABASE)
+            cursor = conn.cursor()
+            cursor.execute('SELECT id, name, elo_rating, skill_level, availability FROM players')
+            players = cursor.fetchall()
+            conn.close()
+
 class AddPlayerDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -563,20 +572,15 @@ class ScheduleSessionDialog(QDialog):
         layout.addWidget(self.submit_scores_button)
 
         self.setLayout(layout)
+
     
     def populate_available_players(self):
         conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
-        # Fetch players with 'None' availability or those available today
-        today_day = datetime.now().strftime('%A')  # e.g., 'Monday'
-        # Handle cases where availability lists multiple days, ensuring partial matches
+        today_day = datetime.now().strftime('%A')
         cursor.execute('''
             SELECT name FROM players
-            WHERE availability = 'None' 
-               OR availability LIKE ?
-               OR availability LIKE ?
-               OR availability LIKE ?
-        ''', (f'%{today_day}%', f'%, {today_day}', f'{today_day},%'))
+        ''')
         players = cursor.fetchall()
         conn.close()
 
@@ -671,6 +675,33 @@ class ScheduleSessionDialog(QDialog):
                         self.matchups_table.setItem(row_position, 3, QTableWidgetItem(""))  # Score A
                         self.matchups_table.setItem(row_position, 4, QTableWidgetItem(""))  # Score B
                     else:
+                        # Check if there are remaining players and available fields
+                        remaining_players = len(players_for_fields) % required_players
+                        if remaining_players >= 2 and field_number <= MAX_FIELDS:
+                            # Pair remaining players for singles matches
+                            for i in range(0, remaining_players, 2):
+                                if i + 1 < remaining_players:
+                                    player_a = get_player_id(players_for_fields[-(i + 1)])
+                                    player_b = get_player_id(players_for_fields[-(i + 2)])
+                                    player_a_name = get_player_name_by_id(player_a) if player_a else "N/A"
+                                    player_b_name = get_player_name_by_id(player_b) if player_b else "N/A"
+                                    cursor.execute('''
+                                    INSERT INTO matches (date, session_id, player_a_id, player_b_id, score_a, score_b, winner_id, match_type, field_number)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    ''', (date_str, session_id, player_a, player_b, 0, 0, None, 'Singles', field_number))
+                                    row_position = self.matchups_table.rowCount()
+                                    self.matchups_table.insertRow(row_position)
+                                    self.matchups_table.setItem(row_position, 0, QTableWidgetItem(str(field_number)))
+                                    self.matchups_table.setItem(row_position, 1, QTableWidgetItem(player_a_name))
+                                    self.matchups_table.setItem(row_position, 2, QTableWidgetItem(player_b_name))
+                                    self.matchups_table.setItem(row_position, 3, QTableWidgetItem(""))  # Score A
+                                    self.matchups_table.setItem(row_position, 4, QTableWidgetItem(""))  # Score B
+                                    field_number += 1
+                                    # Remove paired players from the list to avoid duplication
+                                    players_for_fields.pop(-(i + 1))
+                                    players_for_fields.pop(-(i + 1))  # Note: index shifts after the first pop
+                                    break
+
                         player_a_id, player_b_id, player_c_id, player_d_id = match
                         player_a_name = get_player_name_by_id(player_a_id) if player_a_id else "N/A"
                         player_b_name = get_player_name_by_id(player_b_id) if player_b_id else "N/A"
@@ -707,47 +738,6 @@ class ScheduleSessionDialog(QDialog):
         except sqlite3.OperationalError as e:
             QMessageBox.critical(self, 'Database Error', f'An error occurred while accessing the database: {str(e)}')
 
-            
-    
-        def submit_scores(self):
-            row_count = self.scores_table.rowCount()
-            
-            for row in range(row_count):
-                player_a = self.scores_table.item(row, 0).text()
-                player_b = self.scores_table.item(row, 1).text()
-                score_a = self.scores_table.item(row, 2).text()
-                score_b = self.scores_table.item(row, 3).text()
-                
-                # Process the scores (e.g., update the database, calculate new ELO ratings, etc.)
-                self.process_scores(player_a, player_b, score_a, score_b)
-    
-        def process_scores(self, player_a, player_b, score_a, score_b):
-            # Example processing logic
-            try:
-                score_a = int(score_a)
-                score_b = int(score_b)
-                
-                # Update the database or perform other logic
-                conn = sqlite3.connect(DATABASE)
-                cursor = conn.cursor()
-                
-                cursor.execute('''
-                    INSERT INTO matches (player_a, player_b, score_a, score_b)
-                    VALUES (?, ?, ?, ?)
-                ''', (player_a, player_b, score_a, score_b))
-                
-                conn.commit()
-                conn.close()
-                
-                # Update ELO ratings or other logic
-                self.update_elo_ratings(player_a, player_b, score_a, score_b)
-                
-            except ValueError:
-                QMessageBox.warning(self, "Input Error", "Scores must be integers.")
-    
-        def update_elo_ratings(self, player_a, player_b, score_a, score_b):
-            # Implement ELO rating update logic here
-            pass
 
 
     def submit_scores(self):
@@ -898,6 +888,64 @@ class ScheduleSessionDialog(QDialog):
 
         conn.close()
 
+
+class RecordMatchDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Record Match Result')
+        self.setGeometry(100, 100, 400, 300)
+        self.initUI()
+    
+    def initUI(self):
+        layout = QVBoxLayout()
+
+        # Player A Selection
+        self.player_a_label = QLabel('Player A:')
+        self.player_a_combo = QComboBox()
+        self.player_a_combo.addItems(get_player_names())
+        layout.addWidget(self.player_a_label)
+        layout.addWidget(self.player_a_combo)
+
+        # Player B Selection
+        self.player_b_label = QLabel('Player B:')
+        self.player_b_combo = QComboBox()
+        self.player_b_combo.addItems(get_player_names())
+        layout.addWidget(self.player_b_label)
+        layout.addWidget(self.player_b_combo)
+
+        # Winner Selection
+        self.winner_label = QLabel('Winner:')
+        self.winner_combo = QComboBox()
+        self.winner_combo.addItems(['Player A', 'Player B'])
+        layout.addWidget(self.winner_label)
+        layout.addWidget(self.winner_combo)
+
+        # Submit Button
+        self.submit_button = QPushButton('Submit Result')
+        self.submit_button.clicked.connect(self.submit_result)
+        layout.addWidget(self.submit_button)
+
+        self.setLayout(layout)
+    
+    def submit_result(self):
+        player_a_name = self.player_a_combo.currentText()
+        player_b_name = self.player_b_combo.currentText()
+        winner = self.winner_combo.currentText()
+
+        if player_a_name == player_b_name:
+            QMessageBox.warning(self, 'Input Error', 'Player A and Player B cannot be the same.')
+            return
+
+        player_a_id = get_player_id(player_a_name)
+        player_b_id = get_player_id(player_b_name)
+        winner_id = player_a_id if winner == 'Player A' else player_b_id
+
+        # Assuming match_type as 'Singles' and field_number as None since it's manually recorded
+        update_elo(player_a_id, player_b_id, winner_id, session_id=None, match_type='Singles', field_number=None)
+
+        QMessageBox.information(self, 'Success', 'Match result recorded successfully.')
+        self.accept()
+
 class LeaderboardWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -923,41 +971,6 @@ class LeaderboardWindow(QDialog):
             self.table.setItem(row_idx, 0, QTableWidgetItem(name))
             self.table.setItem(row_idx, 1, QTableWidgetItem(str(round(elo, 2))))
             self.table.setItem(row_idx, 2, QTableWidgetItem(skill))
-
-class MatchHistoryWindow(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Match History')
-        self.setGeometry(150, 150, 800, 500)
-        self.initUI()
-    
-    def initUI(self):
-        layout = QVBoxLayout()
-
-        self.table = QTableWidget()
-        self.table.setColumnCount(9)
-        self.table.setHorizontalHeaderLabels([
-            'Date', 'Session', 'Player A', 'Player B',
-            'Score A', 'Score B', 'Winner', 'Match Type', 'Field Number'
-        ])
-        self.load_match_history()
-        layout.addWidget(self.table)
-
-        self.setLayout(layout)
-    
-    def load_match_history(self):
-        matches = get_match_history()
-        self.table.setRowCount(len(matches))
-        for row_idx, (date, session, pa, pb, sa, sb, pw, mt, fn) in enumerate(matches):
-            self.table.setItem(row_idx, 0, QTableWidgetItem(date))
-            self.table.setItem(row_idx, 1, QTableWidgetItem(session))
-            self.table.setItem(row_idx, 2, QTableWidgetItem(pa))
-            self.table.setItem(row_idx, 3, QTableWidgetItem(pb))
-            self.table.setItem(row_idx, 4, QTableWidgetItem(str(sa)))
-            self.table.setItem(row_idx, 5, QTableWidgetItem(str(sb)))
-            self.table.setItem(row_idx, 6, QTableWidgetItem(pw if pw else "N/A"))
-            self.table.setItem(row_idx, 7, QTableWidgetItem(mt))
-            self.table.setItem(row_idx, 8, QTableWidgetItem(str(fn) if fn else 'N/A'))
 
 class PerformanceTrackingWindow(QDialog):
     def __init__(self, parent=None):
@@ -1054,88 +1067,6 @@ class ImportPlayersDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, 'Error', f'Failed to import players.\nError: {str(e)}')
 
-class RecordMatchDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Record Match Result')
-        self.setGeometry(100, 100, 400, 300)
-        self.initUI()
-    
-    def initUI(self):
-        layout = QVBoxLayout()
-
-        # Player A Selection
-        self.player_a_label = QLabel('Player A:')
-        self.player_a_combo = QComboBox()
-        self.player_a_combo.addItems(get_player_names())
-        layout.addWidget(self.player_a_label)
-        layout.addWidget(self.player_a_combo)
-
-        # Player B Selection
-        self.player_b_label = QLabel('Player B:')
-        self.player_b_combo = QComboBox()
-        self.player_b_combo.addItems(get_player_names())
-        layout.addWidget(self.player_b_label)
-        layout.addWidget(self.player_b_combo)
-
-        # Winner Selection
-        self.winner_label = QLabel('Winner:')
-        self.winner_combo = QComboBox()
-        self.winner_combo.addItems(['Player A', 'Player B'])
-        layout.addWidget(self.winner_label)
-        layout.addWidget(self.winner_combo)
-
-        # Submit Button
-        self.submit_button = QPushButton('Submit Result')
-        self.submit_button.clicked.connect(self.submit_result)
-        layout.addWidget(self.submit_button)
-
-        self.setLayout(layout)
-    
-    def submit_result(self):
-        player_a_name = self.player_a_combo.currentText()
-        player_b_name = self.player_b_combo.currentText()
-        winner = self.winner_combo.currentText()
-
-        if player_a_name == player_b_name:
-            QMessageBox.warning(self, 'Input Error', 'Player A and Player B cannot be the same.')
-            return
-
-        player_a_id = get_player_id(player_a_name)
-        player_b_id = get_player_id(player_b_name)
-        winner_id = player_a_id if winner == 'Player A' else player_b_id
-
-        # Assuming match_type as 'Singles' and field_number as None since it's manually recorded
-        update_elo(player_a_id, player_b_id, winner_id, session_id=None, match_type='Singles', field_number=None)
-
-        QMessageBox.information(self, 'Success', 'Match result recorded successfully.')
-        self.accept()
-
-class LeaderboardWindow(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Leaderboard')
-        self.setGeometry(150, 150, 500, 400)
-        self.initUI()
-    
-    def initUI(self):
-        layout = QVBoxLayout()
-
-        self.table = QTableWidget()
-        self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(['Name', 'Elo Rating', 'Skill Level'])
-        self.load_leaderboard()
-        layout.addWidget(self.table)
-
-        self.setLayout(layout)
-    
-    def load_leaderboard(self):
-        leaderboard = get_leaderboard()
-        self.table.setRowCount(len(leaderboard))
-        for row_idx, (name, elo, skill) in enumerate(leaderboard):
-            self.table.setItem(row_idx, 0, QTableWidgetItem(name))
-            self.table.setItem(row_idx, 1, QTableWidgetItem(str(round(elo, 2))))
-            self.table.setItem(row_idx, 2, QTableWidgetItem(skill))
 
 class MatchHistoryWindow(QDialog):
     def __init__(self, parent=None):
@@ -1172,246 +1103,6 @@ class MatchHistoryWindow(QDialog):
             self.table.setItem(row_idx, 7, QTableWidgetItem(mt))
             self.table.setItem(row_idx, 8, QTableWidgetItem(str(fn) if fn else 'N/A'))
 
-class PerformanceTrackingWindow(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Performance Tracking')
-        self.setGeometry(150, 150, 600, 500)
-        self.initUI()
-    
-    def initUI(self):
-        layout = QVBoxLayout()
-
-        self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(['Name', 'Elo Rating', 'Matches Played', 'Skill Level', 'Win Rate'])
-        self.load_performance_data()
-        layout.addWidget(self.table)
-
-        self.setLayout(layout)
-    
-    def load_performance_data(self):
-        performance_data = get_performance_data()
-        self.table.setRowCount(len(performance_data))
-        for row_idx, (name, elo, mp, skill, wr) in enumerate(performance_data):
-            self.table.setItem(row_idx, 0, QTableWidgetItem(name))
-            self.table.setItem(row_idx, 1, QTableWidgetItem(str(elo)))
-            self.table.setItem(row_idx, 2, QTableWidgetItem(str(mp)))
-            self.table.setItem(row_idx, 3, QTableWidgetItem(skill))
-            self.table.setItem(row_idx, 4, QTableWidgetItem(wr))
-
-class ImportPlayersDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Import Players from CSV')
-        self.setGeometry(150, 150, 500, 200)
-        self.initUI()
-    
-    def initUI(self):
-        layout = QVBoxLayout()
-
-        self.file_label = QLabel('Select CSV File:')
-        self.file_path = QLineEdit()
-        self.browse_button = QPushButton('Browse')
-        self.browse_button.clicked.connect(self.browse_file)
-
-        file_layout = QHBoxLayout()
-        file_layout.addWidget(self.file_path)
-        file_layout.addWidget(self.browse_button)
-        layout.addWidget(self.file_label)
-        layout.addLayout(file_layout)
-
-        self.import_button = QPushButton('Import Players')
-        self.import_button.clicked.connect(self.import_players)
-        layout.addWidget(self.import_button)
-
-        self.setLayout(layout)
-    
-    def browse_file(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, 'Open CSV File', '', 'CSV Files (*.csv)')
-        if file_name:
-            self.file_path.setText(file_name)
-    
-    def import_players(self):
-        file_path = self.file_path.text().strip()
-        if not file_path:
-            QMessageBox.warning(self, 'Input Error', 'Please select a CSV file.')
-            return
-
-        try:
-            with open(file_path, newline='') as csvfile:
-                reader = csv.DictReader(csvfile)
-                conn = sqlite3.connect(DATABASE)
-                cursor = conn.cursor()
-                for row in reader:
-                    name = row['name'].strip()
-                    skill_level = row.get('skill_level', 'Beginner').strip()
-                    availability = row.get('availability', 'None').strip()
-
-                    # Assign initial Elo rating based on skill level
-                    if skill_level == 'Beginner':
-                        elo = 1300
-                    elif skill_level == 'Intermediate':
-                        elo = 1500
-                    else:
-                        elo = 1700
-
-                    cursor.execute('''
-                        INSERT OR IGNORE INTO players (name, elo_rating, skill_level, availability)
-                        VALUES (?, ?, ?, ?)
-                    ''', (name, elo, skill_level, availability if availability else 'None'))
-                conn.commit()
-                conn.close()
-            QMessageBox.information(self, 'Success', 'Players imported successfully.')
-            self.accept()
-        except Exception as e:
-            QMessageBox.critical(self, 'Error', f'Failed to import players.\nError: {str(e)}')
-
-class RecordMatchDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Record Match Result')
-        self.setGeometry(100, 100, 400, 300)
-        self.initUI()
-    
-    def initUI(self):
-        layout = QVBoxLayout()
-
-        # Player A Selection
-        self.player_a_label = QLabel('Player A:')
-        self.player_a_combo = QComboBox()
-        self.player_a_combo.addItems(get_player_names())
-        layout.addWidget(self.player_a_label)
-        layout.addWidget(self.player_a_combo)
-
-        # Player B Selection
-        self.player_b_label = QLabel('Player B:')
-        self.player_b_combo = QComboBox()
-        self.player_b_combo.addItems(get_player_names())
-        layout.addWidget(self.player_b_label)
-        layout.addWidget(self.player_b_combo)
-
-        # Winner Selection
-        self.winner_label = QLabel('Winner:')
-        self.winner_combo = QComboBox()
-        self.winner_combo.addItems(['Player A', 'Player B'])
-        layout.addWidget(self.winner_label)
-        layout.addWidget(self.winner_combo)
-
-        # Submit Button
-        self.submit_button = QPushButton('Submit Result')
-        self.submit_button.clicked.connect(self.submit_result)
-        layout.addWidget(self.submit_button)
-
-        self.setLayout(layout)
-    
-    def submit_result(self):
-        player_a_name = self.player_a_combo.currentText()
-        player_b_name = self.player_b_combo.currentText()
-        winner = self.winner_combo.currentText()
-
-        if player_a_name == player_b_name:
-            QMessageBox.warning(self, 'Input Error', 'Player A and Player B cannot be the same.')
-            return
-
-        player_a_id = get_player_id(player_a_name)
-        player_b_id = get_player_id(player_b_name)
-        winner_id = player_a_id if winner == 'Player A' else player_b_id
-
-        # Assuming match_type as 'Singles' and field_number as None since it's manually recorded
-        update_elo(player_a_id, player_b_id, winner_id, session_id=None, match_type='Singles', field_number=None)
-
-        QMessageBox.information(self, 'Success', 'Match result recorded successfully.')
-        self.accept()
-
-class LeaderboardWindow(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Leaderboard')
-        self.setGeometry(150, 150, 500, 400)
-        self.initUI()
-    
-    def initUI(self):
-        layout = QVBoxLayout()
-
-        self.table = QTableWidget()
-        self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(['Name', 'Elo Rating', 'Skill Level'])
-        self.load_leaderboard()
-        layout.addWidget(self.table)
-
-        self.setLayout(layout)
-    
-    def load_leaderboard(self):
-        leaderboard = get_leaderboard()
-        self.table.setRowCount(len(leaderboard))
-        for row_idx, (name, elo, skill) in enumerate(leaderboard):
-            self.table.setItem(row_idx, 0, QTableWidgetItem(name))
-            self.table.setItem(row_idx, 1, QTableWidgetItem(str(round(elo, 2))))
-            self.table.setItem(row_idx, 2, QTableWidgetItem(skill))
-
-class MatchHistoryWindow(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Match History')
-        self.setGeometry(150, 150, 800, 500)
-        self.initUI()
-    
-    def initUI(self):
-        layout = QVBoxLayout()
-
-        self.table = QTableWidget()
-        self.table.setColumnCount(9)
-        self.table.setHorizontalHeaderLabels([
-            'Date', 'Session', 'Player A', 'Player B',
-            'Score A', 'Score B', 'Winner', 'Match Type', 'Field Number'
-        ])
-        self.load_match_history()
-        layout.addWidget(self.table)
-
-        self.setLayout(layout)
-    
-    def load_match_history(self):
-        matches = get_match_history()
-        self.table.setRowCount(len(matches))
-        for row_idx, (date, session, pa, pb, sa, sb, pw, mt, fn) in enumerate(matches):
-            self.table.setItem(row_idx, 0, QTableWidgetItem(date))
-            self.table.setItem(row_idx, 1, QTableWidgetItem(session))
-            self.table.setItem(row_idx, 2, QTableWidgetItem(pa))
-            self.table.setItem(row_idx, 3, QTableWidgetItem(pb))
-            self.table.setItem(row_idx, 4, QTableWidgetItem(str(sa)))
-            self.table.setItem(row_idx, 5, QTableWidgetItem(str(sb)))
-            self.table.setItem(row_idx, 6, QTableWidgetItem(pw if pw else "N/A"))
-            self.table.setItem(row_idx, 7, QTableWidgetItem(mt))
-            self.table.setItem(row_idx, 8, QTableWidgetItem(str(fn) if fn else 'N/A'))
-
-class PerformanceTrackingWindow(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Performance Tracking')
-        self.setGeometry(150, 150, 600, 500)
-        self.initUI()
-    
-    def initUI(self):
-        layout = QVBoxLayout()
-
-        self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(['Name', 'Elo Rating', 'Matches Played', 'Skill Level', 'Win Rate'])
-        self.load_performance_data()
-        layout.addWidget(self.table)
-
-        self.setLayout(layout)
-    
-    def load_performance_data(self):
-        performance_data = get_performance_data()
-        self.table.setRowCount(len(performance_data))
-        for row_idx, (name, elo, mp, skill, wr) in enumerate(performance_data):
-            self.table.setItem(row_idx, 0, QTableWidgetItem(name))
-            self.table.setItem(row_idx, 1, QTableWidgetItem(str(elo)))
-            self.table.setItem(row_idx, 2, QTableWidgetItem(str(mp)))
-            self.table.setItem(row_idx, 3, QTableWidgetItem(skill))
-            self.table.setItem(row_idx, 4, QTableWidgetItem(wr))
 
 # Main Application Window
 class MainWindow(QMainWindow):
