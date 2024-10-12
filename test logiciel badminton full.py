@@ -10,10 +10,10 @@ from PyQt5.QtWidgets import (
     QWidget, QMenu, QTextEdit, QAction, QAbstractItemView
 )
 from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QSpinBox
 
 # Constants
 DATABASE = 'badminton_app.db'
-MAX_FIELDS = 4  # Number of badminton fields
 
 # Initialize the database
 def init_db():
@@ -486,8 +486,8 @@ class ScheduleSessionDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Schedule New Session')
-        self.setGeometry(100, 100, 900, 700)  # Increased size to accommodate table
-        self.session_id = None  # To keep track of the current session
+        self.setGeometry(100, 100, 900, 700)
+        self.session_id = None
         self.initUI()
     
     def initUI(self):
@@ -496,9 +496,21 @@ class ScheduleSessionDialog(QDialog):
         form_layout = QFormLayout()
 
         self.match_type_combo = QComboBox()
-        self.match_type_combo.addItems(['Singles', 'Doubles'])
+        self.match_type_combo.addItems(['Doubles', 'Singles'])
         form_layout.addRow('Match Type:', self.match_type_combo)
 
+        # Add field number selection
+        self.field_number_spin = QSpinBox()
+        self.field_number_spin.setMinimum(1)
+        self.field_number_spin.setMaximum(10)  # You can adjust this maximum as needed
+        self.field_number_spin.setValue(4)  # Default to 4 fields
+        form_layout.addRow('Number of Fields:', self.field_number_spin)
+
+        # Initialize num_fields
+        self.num_fields = self.field_number_spin.value()  # Set initial value
+
+        # Connect the signal to update num_fields directly
+        self.field_number_spin.valueChanged.connect(lambda value: setattr(self, 'num_fields', value))
         layout.addLayout(form_layout)
 
         # Drag and Drop Setup
@@ -601,10 +613,10 @@ class ScheduleSessionDialog(QDialog):
 
         # Determine maximum players based on match type and fields
         if match_type == 'Singles':
-            max_players = 2 * MAX_FIELDS  # 8 players
+            max_players = 2 * self.num_fields  # 8 players
             required_players = 2
         else:
-            max_players = 4 * MAX_FIELDS  # 16 players
+            max_players = 4 * self.num_fields  # 16 players
             required_players = 4
 
         if len(assigned_players) < required_players:
@@ -677,7 +689,7 @@ class ScheduleSessionDialog(QDialog):
                     else:
                         # Check if there are remaining players and available fields
                         remaining_players = len(players_for_fields) % required_players
-                        if remaining_players >= 2 and field_number <= MAX_FIELDS:
+                        if remaining_players >= 2 and field_number <= self.num_fields:
                             # Pair remaining players for singles matches
                             for i in range(0, remaining_players, 2):
                                 if i + 1 < remaining_players:
@@ -721,7 +733,7 @@ class ScheduleSessionDialog(QDialog):
                         self.matchups_table.setItem(row_position, 3, QTableWidgetItem(""))  # Score A
                         self.matchups_table.setItem(row_position, 4, QTableWidgetItem(""))  # Score B
                     field_number += 1
-                    if field_number > MAX_FIELDS:
+                    if field_number > self.num_fields:
                         field_number = 1  # Cycle through fields if more than MAX_FIELDS matches
 
                 # Resize columns to fit the content
