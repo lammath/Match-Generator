@@ -7,10 +7,11 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QLabel, QLineEdit,
     QVBoxLayout, QHBoxLayout, QMessageBox, QTableWidget, QTableWidgetItem,
     QComboBox, QFileDialog, QDialog, QListWidget, QListWidgetItem, QFormLayout,
-    QWidget, QMenu, QTextEdit, QAction, QAbstractItemView
+    QWidget, QMenu, QTextEdit, QAction, QSpinBox, QDialogButtonBox, QAbstractItemView
 )
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QSpinBox
+
+
 
 # Constants
 DATABASE = 'badminton_app.db'
@@ -27,7 +28,6 @@ def init_db():
             name TEXT NOT NULL UNIQUE,
             elo_rating REAL DEFAULT 1500,
             matches_played INTEGER DEFAULT 0,
-            skill_level TEXT,
             last_played DATETIME
         )
     ''')
@@ -70,14 +70,6 @@ def init_db():
 # Elo Rating System Functions
 def calculate_expected_score(rating_a, rating_b):
     return 1 / (1 + 10 ** ((rating_b - rating_a) / 400))
-
-def get_skill_level(elo_rating):
-    if elo_rating < 1400:
-        return 'Beginner'
-    elif 1400 <= elo_rating < 1600:
-        return 'Intermediate'
-    else:
-        return 'Advanced'
 
 def get_k_factor(matches_played):
     if matches_played < 30:
@@ -136,20 +128,6 @@ def update_elo(player_a_id, player_b_id, winner_id, session_id, match_type, fiel
         WHERE id = ?
     ''', (new_rating_b, matches_b + 1, player_b_id))
 
-    # Update skill levels
-    skill_a = get_skill_level(new_rating_a)
-    skill_b = get_skill_level(new_rating_b)
-    cursor.execute('''
-        UPDATE players 
-        SET skill_level = ?
-        WHERE id = ?
-    ''', (skill_a, player_a_id))
-    cursor.execute('''
-        UPDATE players 
-        SET skill_level = ?
-        WHERE id = ?
-    ''', (skill_b, player_b_id))
-
     # Record the match
     cursor.execute('''
         INSERT INTO matches (date, session_id, player_a_id, player_b_id, score_a, score_b, winner_id, match_type, field_number)
@@ -189,7 +167,7 @@ def get_leaderboard():
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT name, elo_rating, skill_level FROM players
+        SELECT name, elo_rating FROM players
         ORDER BY elo_rating DESC
     ''')
     leaderboard = cursor.fetchall()
@@ -216,7 +194,7 @@ def get_performance_data():
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT name, elo_rating, matches_played, skill_level FROM players
+        SELECT name, elo_rating, matches_played FROM players
     ''')
     players = cursor.fetchall()
     conn.close()
@@ -402,20 +380,29 @@ class ManagePlayersDialog(QDialog):
         cursor = conn.cursor()
         cursor.execute('SELECT id, name, elo_rating FROM players')
         players = cursor.fetchall()
-        conn.close()
 
         self.table.setRowCount(len(players))
-        for row_idx, (id, name, elo) in enumerate(players):
-            self.table.setItem(row_idx, 0, QTableWidgetItem(str(id)))
-            self.table.setItem(row_idx, 1, QTableWidgetItem(name))
-            self.table.setItem(row_idx, 2, QTableWidgetItem(str(round(elo, 2))))
 
+        for row, (id, name, elo) in enumerate(players):
+            self.table.setItem(row, 0, QTableWidgetItem(str(id)))
+            self.table.setItem(row, 1, QTableWidgetItem(name))
+            self.table.setItem(row, 2, QTableWidgetItem(str(elo)))
+        
+        conn.close()
+
+    def add_player_to_db(self, name, elo_rating):
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+        cursor.execute('INSERT INTO players (name, elo_rating) VALUES (?, ?)', (name, elo_rating))
+        conn.commit()
+        conn.close()
 
     def add_player(self):
         dialog = AddPlayerDialog(self)
         if dialog.exec_() == QDialog.Accepted:
+            name, elo_rating = dialog.get_player_data()
+            self.add_player_to_db(name, elo_rating)
             self.load_players()  # Reload players after adding
-            self.refresh_available_players()  # Refresh available players list
 
     def remove_players(self):
         selected_rows = set()
@@ -444,10 +431,34 @@ class ManagePlayersDialog(QDialog):
     def refresh_available_players(self):
             conn = sqlite3.connect(DATABASE)
             cursor = conn.cursor()
-            cursor.execute('SELECT id, name, elo_rating, skill_level FROM players')
+            cursor.execute('SELECT id, name, elo_rating FROM players')
             players = cursor.fetchall()
             conn.close()
 
+class AddPlayerDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Add Player")
+        
+        self.layout = QFormLayout()
+        
+        self.name_input = QLineEdit()
+        self.elo_input = QLineEdit()
+        
+        self.layout.addRow("Name:", self.name_input)
+        self.layout.addRow("ELO Rating:", self.elo_input)
+        
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        
+        self.layout.addWidget(self.buttons)
+        self.setLayout(self.layout)
+    
+    def get_player_data(self):
+        name = self.name_input.text()
+        elo = float(self.elo_input.text())
+        return name, elo
 
 
 class ImportPlayersDialog(QDialog):
@@ -490,20 +501,10 @@ class ImportPlayersDialog(QDialog):
                 cursor = conn.cursor()
                 for row in reader:
                     name = row['name'].strip()
-                    skill_level = row.get('skill_level', 'Beginner').strip()
-
-                    # Assign initial Elo rating based on skill level
-                    if skill_level == 'Beginner':
-                        elo = 1300
-                    elif skill_level == 'Intermediate':
-                        elo = 1500
-                    else:
-                        elo = 1700
-
                     cursor.execute('''
-                        INSERT OR IGNORE INTO players (name, elo_rating, skill_level)
+                        INSERT OR IGNORE INTO players (name, elo_rating)
                         VALUES (?, ?, ?, ?)
-                    ''', (name, elo, skill_level))
+                    ''', (name, elo))
                 conn.commit()
                 conn.close()
             QMessageBox.information(self, 'Success', 'Players imported successfully.')
@@ -512,64 +513,6 @@ class ImportPlayersDialog(QDialog):
             QMessageBox.critical(self, 'Error', f'Failed to import players.\nError: {str(e)}')
              
 
-
-class AddPlayerDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Add New Player')
-        self.setGeometry(200, 200, 400, 300)
-        self.initUI()
-    
-    def initUI(self):
-        layout = QVBoxLayout()
-
-        form_layout = QFormLayout()
-
-        self.name_input = QLineEdit()
-        form_layout.addRow('Name:', self.name_input)
-
-        self.skill_combo = QComboBox()
-        self.skill_combo.addItems(['Beginner', 'Intermediate', 'Advanced'])
-        form_layout.addRow('Skill Level:', self.skill_combo)
-
-        layout.addLayout(form_layout)
-
-        self.submit_button = QPushButton('Add Player')
-        self.submit_button.clicked.connect(self.add_player)
-        layout.addWidget(self.submit_button)
-
-        self.setLayout(layout)
-    
-    def add_player(self):
-        name = self.name_input.text().strip()
-        skill_level = self.skill_combo.currentText()
-
-        if not name:
-            QMessageBox.warning(self, 'Input Error', 'Player name cannot be empty.')
-            return
-
-        # Assign initial Elo rating based on skill level
-        if skill_level == 'Beginner':
-            elo = 1300
-        elif skill_level == 'Intermediate':
-            elo = 1500
-        else:
-            elo = 1700
-
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        try:
-            cursor.execute('''
-                INSERT INTO players (name, elo_rating, skill_level)
-                VALUES (?, ?, ?)
-            ''', (name, elo, skill_level))
-            conn.commit()
-            QMessageBox.information(self, 'Success', f'Player "{name}" added successfully.')
-            self.accept()
-        except sqlite3.IntegrityError:
-            QMessageBox.warning(self, 'Error', f'Player "{name}" already exists.')
-        finally:
-            conn.close()
 
 class ScheduleSessionDialog(QDialog):
     def __init__(self, parent=None):
