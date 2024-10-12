@@ -201,7 +201,7 @@ def get_performance_data():
 
     # Calculate win rates
     performance_data = []
-    for name, elo, matches_played, skill in players:
+    for name, elo, matches_played in players:
         if matches_played == 0:
             win_rate = 'N/A'
         else:
@@ -215,7 +215,7 @@ def get_performance_data():
             wins = cursor.fetchone()[0]
             conn.close()
             win_rate = f"{(wins / matches_played * 100):.2f}%"
-        performance_data.append((name, round(elo,2), matches_played, skill, win_rate))
+        performance_data.append((name, round(elo,0), matches_played, win_rate))
     return performance_data
 
 # Custom QListWidget for Assigned Players with Drag-and-Drop and Removal
@@ -386,7 +386,7 @@ class ManagePlayersDialog(QDialog):
         for row, (id, name, elo) in enumerate(players):
             self.table.setItem(row, 0, QTableWidgetItem(str(id)))
             self.table.setItem(row, 1, QTableWidgetItem(name))
-            self.table.setItem(row, 2, QTableWidgetItem(str(elo)))
+            self.table.setItem(row, 2, QTableWidgetItem(str(round(elo,0))))
         
         conn.close()
 
@@ -463,7 +463,8 @@ class AddPlayerDialog(QDialog):
 
 class ImportPlayersDialog(QDialog):
 
-    def initUI(self):
+    def __init__(self, parent=None):
+        super().__init__(parent)
         layout = QVBoxLayout()
 
         self.file_label = QLabel('Select CSV File:')
@@ -500,11 +501,13 @@ class ImportPlayersDialog(QDialog):
                 conn = sqlite3.connect(DATABASE)
                 cursor = conn.cursor()
                 for row in reader:
-                    name = row['name'].strip()
+                    name = row.get('Name', '').strip()
+                    elo_rating = row.get('Elo Rating', '')
+                    win_rate = row.get('Win Rate', '')
                     cursor.execute('''
-                        INSERT OR IGNORE INTO players (name, elo_rating)
-                        VALUES (?, ?, ?, ?)
-                    ''', (name, elo))
+                        INSERT OR IGNORE INTO players (name, elo_rating, win_rate)
+                        VALUES (?, ?, ?)
+                    ''', (name, elo_rating, win_rate))
                 conn.commit()
                 conn.close()
             QMessageBox.information(self, 'Success', 'Players imported successfully.')
@@ -959,9 +962,9 @@ class LeaderboardWindow(QDialog):
     def load_leaderboard(self):
         performance_data = get_performance_data()
         self.table.setRowCount(len(performance_data))
-        for row_idx, (name, elo, mp, skill, wr) in enumerate(performance_data):
+        for row_idx, (name, elo, mp, wr) in enumerate(performance_data):
             self.table.setItem(row_idx, 0, QTableWidgetItem(name))
-            self.table.setItem(row_idx, 1, QTableWidgetItem(str(round(elo,2))))
+            self.table.setItem(row_idx, 1, QTableWidgetItem(str(round(elo,0))))
             self.table.setItem(row_idx, 2, QTableWidgetItem(str(mp)))
             self.table.setItem(row_idx, 3, QTableWidgetItem(wr))
 
@@ -1000,12 +1003,11 @@ class PerformanceTrackingWindow(QDialog):
     def load_performance_data(self):
         performance_data = get_performance_data()
         self.table.setRowCount(len(performance_data))
-        for row_idx, (name, elo, mp, skill, wr) in enumerate(performance_data):
+        for row_idx, (name, elo, mp, wr) in enumerate(performance_data):
             self.table.setItem(row_idx, 0, QTableWidgetItem(name))
-            self.table.setItem(row_idx, 1, QTableWidgetItem(str(elo)))
+            self.table.setItem(row_idx, 1, QTableWidgetItem(str(round(elo,0))))
             self.table.setItem(row_idx, 2, QTableWidgetItem(str(mp)))
-            self.table.setItem(row_idx, 3, QTableWidgetItem(skill))
-            self.table.setItem(row_idx, 4, QTableWidgetItem(wr))
+            self.table.setItem(row_idx, 3, QTableWidgetItem(wr))
 
 
 class MatchHistoryWindow(QDialog):
