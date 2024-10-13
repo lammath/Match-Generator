@@ -20,13 +20,9 @@ DATABASE = 'badminton_app.db'
 def init_db():
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
-
-    cursor.execute('''
-    DROP TABLE IF EXISTS matches
-    ''')
-    cursor.execute('''
-    DROP TABLE IF EXISTS sessions
-    ''')
+    
+    #cursor.execute('''DROP TABLE IF EXISTS matches''')
+    #cursor.execute('''DROP TABLE IF EXISTS sessions''')
     
     # Create players table
     cursor.execute('''
@@ -641,9 +637,10 @@ class ScheduleSessionDialog(QDialog):
             self.available_list.addItem(item)
     
     def create_matchup(self):
-        match_type = self.match_type_combo.currentText()
-
+        global date_str
         date_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # Current date
+        
+        match_type = self.match_type_combo.currentText()
 
         assigned_players = []
         for index in range(self.assigned_list.count()):
@@ -679,7 +676,7 @@ class ScheduleSessionDialog(QDialog):
         random.shuffle(players_for_fields)
 
         # Assign a default session name based on current date and time
-        session_name = f"Session on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        session_name = f"Session on {date_str}"
 
         try:
             with sqlite3.connect(DATABASE) as conn:
@@ -720,7 +717,7 @@ class ScheduleSessionDialog(QDialog):
                         cursor.execute('''
                             INSERT INTO matches (date, session_id, player_a_id, player_b_id, score_a, score_b, winner_id, match_type, field_number)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (date_str, session_id, player_a_id, player_b_id, 0, 0, None, match_type, field_number))
+                        ''', (date_str, session_id, player_a_id, player_b_id, 1, 1, None, match_type, field_number))
                         row_position = self.matchups_table.rowCount()
                         self.matchups_table.insertRow(row_position)
                         self.matchups_table.setItem(row_position, 0, QTableWidgetItem(str(field_number)))
@@ -742,7 +739,7 @@ class ScheduleSessionDialog(QDialog):
                                     cursor.execute('''
                                     INSERT INTO matches (date, session_id, player_a_id, player_b_id, score_a, score_b, winner_id, match_type, field_number)
                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                    ''', (date_str, session_id, player_a, player_b, 0, 0, None, 'Singles', field_number))
+                                    ''', (date_str, session_id, player_a, player_b, 1, 1, None, 'Singles', field_number))
                                     row_position = self.matchups_table.rowCount()
                                     self.matchups_table.insertRow(row_position)
                                     self.matchups_table.setItem(row_position, 0, QTableWidgetItem(str(field_number)))
@@ -755,7 +752,7 @@ class ScheduleSessionDialog(QDialog):
                                     players_for_fields.pop(-(i + 1))
                                     players_for_fields.pop(-(i + 1))  # Note: index shifts after the first pop
                                     break
-                        print(players_for_fields)
+    
 
                         player_a_id, player_b_id, player_c_id, player_d_id = match
                         player_a_name = get_player_name_by_id(player_a_id) if player_a_id else "N/A"
@@ -765,7 +762,7 @@ class ScheduleSessionDialog(QDialog):
                         cursor.execute('''
                             INSERT INTO matches (date, session_id, player_a_id, player_b_id, score_a, score_b, winner_id, match_type, field_number)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (date_str, session_id, player_a_id, player_b_id, 0, 0, None, match_type, field_number))
+                        ''', (date_str, session_id, player_a_id, player_b_id, 1, 1, None, match_type, field_number))
                         row_position = self.matchups_table.rowCount()
                         self.matchups_table.insertRow(row_position)
                         self.matchups_table.setItem(row_position, 0, QTableWidgetItem(str(field_number)))
@@ -823,8 +820,6 @@ class ScheduleSessionDialog(QDialog):
             if score_b == 'N/A':
                 score_b = 0
 
-            print(score_a)
-            print(score_b)
 
             # Validate scores
             if not score_a.isdigit() or not score_b.isdigit():
@@ -843,16 +838,14 @@ class ScheduleSessionDialog(QDialog):
             # Fetch match_id from the database based on field_number
             cursor.execute('''
                 SELECT id FROM matches
-                WHERE field_number = ?
-            ''', (field_number,))
+                WHERE field_number = ? AND date = ?
+            ''', (field_number, date_str))
             match = cursor.fetchone()
             
             if match:
                 match_id = match[0]
-                print("Match id : ", match_id)
                 # Fetch player IDs based on team names
                 if ' & ' in team_a and ' & ' in team_b:
-                    print("ligne 837 fonctionne")
                     # Doubles
                     players_a = team_a.replace('(', '').replace(')', '').split(' & ')
                     players_b = team_b.replace('(', '').replace(')', '').split(' & ')
@@ -881,7 +874,6 @@ class ScheduleSessionDialog(QDialog):
                             SET score_a = ?, score_b = ?, winner_id = NULL
                             WHERE id = ?
                         ''', (score_a, score_b, match_id))
-                    print(match_id)
                 else:
                     # Singles
                     player_a_id = get_player_id(team_a)
