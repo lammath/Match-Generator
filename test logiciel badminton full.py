@@ -12,7 +12,6 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 
 
-
 # Constants
 DATABASE = 'badminton_app.db'
 
@@ -53,16 +52,24 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT NOT NULL,
             session_id INTEGER,
-            player_a_id INTEGER,
-            player_b_id INTEGER,
+            player_a1_id INTEGER,
+            player_a2_id INTEGER,
+            player_b1_id INTEGER,
+            player_b2_id INTEGER,
+            team_a_names TEXT,
+            team_b_names TEXT,
             score_a INTEGER,
             score_b INTEGER,
-            winner_id INTEGER,
+            winner1_id INTEGER,
+            winner2_id INTEGER,
             match_type TEXT,
             field_number INTEGER,
-            FOREIGN KEY(player_a_id) REFERENCES players(id),
-            FOREIGN KEY(player_b_id) REFERENCES players(id),
-            FOREIGN KEY(winner_id) REFERENCES players(id),
+            FOREIGN KEY(player_a1_id) REFERENCES players(id),
+            FOREIGN KEY(player_a2_id) REFERENCES players(id),
+            FOREIGN KEY(player_b1_id) REFERENCES players(id),
+            FOREIGN KEY(player_b2_id) REFERENCES players(id),
+            FOREIGN KEY(winner1_id) REFERENCES players(id),
+            FOREIGN KEY(winner2_id) REFERENCES players(id),
             FOREIGN KEY(session_id) REFERENCES sessions(id)
         )
     ''')
@@ -71,8 +78,8 @@ def init_db():
     conn.close()
 
 # Elo Rating System Functions
-def calculate_expected_score(rating_a, rating_b):
-    return 1 / (1 + 10 ** ((rating_b - rating_a) / 400))
+def calculate_expected_score(rating_a1, rating_a2, rating_b1, rating_b2):
+    return 1 / (1 + 10 ** (((rating_b1 + rating_b2) - (rating_a1 + rating_a2)) / 400))
 
 def get_k_factor(matches_played):
     if matches_played < 30:
@@ -80,63 +87,89 @@ def get_k_factor(matches_played):
     else:
         return 20
 
-def update_elo(player_a_id, player_b_id, winner_id, session_id, match_type, field_number):
+def update_elo(player_a1_id, player_a2_id, player_b1_id, player_b2_id, winner1_id, winner2_id, session_id, match_type, field_number):
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
 
     # Fetch current ratings and match counts
-    cursor.execute('SELECT elo_rating, matches_played FROM players WHERE id = ?', (player_a_id,))
-    result_a = cursor.fetchone()
-    if not result_a:
+    cursor.execute('SELECT elo_rating, matches_played FROM players WHERE id = ?', (player_a1_id,))
+    result_a1 = cursor.fetchone()
+    if not result_a1:
         conn.close()
         return
-    rating_a, matches_a = result_a
+    rating_a1, matches_a1 = result_a1
 
-    cursor.execute('SELECT elo_rating, matches_played FROM players WHERE id = ?', (player_b_id,))
-    result_b = cursor.fetchone()
-    if not result_b:
+    cursor.execute('SELECT elo_rating, matches_played FROM players WHERE id = ?', (player_a2_id,))
+    result_a2 = cursor.fetchone()
+    if not result_a2:
         conn.close()
         return
-    rating_b, matches_b = result_b
+    rating_a2, matches_a2 = result_a2
+
+    cursor.execute('SELECT elo_rating, matches_played FROM players WHERE id = ?', (player_b1_id,))
+    result_b1 = cursor.fetchone()
+    if not result_b1:
+        conn.close()
+        return
+    rating_b1, matches_b1 = result_b1
+
+    cursor.execute('SELECT elo_rating, matches_played FROM players WHERE id = ?', (player_b2_id,))
+    result_b2 = cursor.fetchone()
+    if not result_b2:
+        conn.close()
+        return
+    rating_b2, matches_b2 = result_b2
 
     # Calculate expected scores
-    expected_a = calculate_expected_score(rating_a, rating_b)
-    expected_b = calculate_expected_score(rating_b, rating_a)
+    expected_a = calculate_expected_score(rating_a1, rating_a2, rating_b1, rating_b2)
+    expected_b = 1 - expected_a
 
     # Determine actual scores
-    if winner_id == player_a_id:
+    if winner1_id == player_a1_id and winner2_id == player_a2_id:
         score_a, score_b = 1, 0
-    elif winner_id == player_b_id:
+    elif winner1_id == player_b1_id and winner2_id == player_b2_id:
         score_a, score_b = 0, 1
     else:
         score_a, score_b = 0.5, 0.5  # Handle draw if necessary
 
     # Determine K-factors
-    k_a = get_k_factor(matches_a)
-    k_b = get_k_factor(matches_b)
+    k_a = get_k_factor(matches_a1 + matches_a2)
+    k_b = get_k_factor(matches_b1 + matches_b2)
 
     # Update ratings
-    new_rating_a = rating_a + k_a * (score_a - expected_a)
-    new_rating_b = rating_b + k_b * (score_b - expected_b)
+    new_rating_a1 = rating_a1 + k_a * (score_a - expected_a)
+    new_rating_a2 = rating_a2 + k_a * (score_a - expected_a)
+    new_rating_b1 = rating_b1 + k_b * (score_b - expected_b)
+    new_rating_b2 = rating_b2 + k_b * (score_b - expected_b)
 
     # Update players' ratings and match counts
     cursor.execute('''
         UPDATE players 
         SET elo_rating = ?, matches_played = ?
         WHERE id = ?
-    ''', (new_rating_a, matches_a + 1, player_a_id))
+    ''', (new_rating_a1, matches_a1 + 1, player_a1_id))
     cursor.execute('''
         UPDATE players 
         SET elo_rating = ?, matches_played = ?
         WHERE id = ?
-    ''', (new_rating_b, matches_b + 1, player_b_id))
+    ''', (new_rating_a2, matches_a2 + 1, player_a2_id))
+    cursor.execute('''
+        UPDATE players 
+        SET elo_rating = ?, matches_played = ?
+        WHERE id = ?
+    ''', (new_rating_b1, matches_b1 + 1, player_b1_id))
+    cursor.execute('''
+        UPDATE players 
+        SET elo_rating = ?, matches_played = ?
+        WHERE id = ?
+    ''', (new_rating_b2, matches_b2 + 1, player_b2_id))
 
     # Record the match
     cursor.execute('''
-        INSERT INTO matches (date, session_id, player_a_id, player_b_id, score_a, score_b, winner_id, match_type, field_number)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), session_id, player_a_id, player_b_id,
-          int(score_a), int(score_b), winner_id if winner_id else None, match_type, field_number))
+        INSERT INTO matches (date, session_id, player_a1_id, player_a2_id, player_b1_id, player_b2_id, score_a, score_b, winner1_id, winner2_id, match_type, field_number)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), session_id, player_a1_id, player_a2_id, player_b1_id, player_b2_id,
+          int(score_a), int(score_b), winner1_id if winner1_id else None, winner2_id if winner2_id else None, match_type, field_number))
 
     conn.commit()
     conn.close()
@@ -181,17 +214,39 @@ def get_match_history():
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT m.date, s.name, pa.name, pb.name, m.score_a, m.score_b, pw.name, m.match_type, m.field_number
+        SELECT m.date, s.name,
+                CASE
+                    WHEN pa2.name IS NOT NULL THEN pa1.name || ' & ' || pa2.name
+                    ELSE pa1.name
+                END AS team_a_names, 
+                   
+                CASE
+                    WHEN pb2.name IS NOT NULL THEN pb1.name || ' & ' || pb2.name
+                    ELSE pb1.name
+                END AS team_b_names, 
+                   
+                m.score_a, m.score_b,
+                CASE
+                    WHEN pw1.name IS NOT NULL AND pw2.name IS NOT NULL THEN pw1.name || ' & ' || pw2.name
+                    WHEN pw1.name IS NOT NULL THEN pw1.name
+                    WHEN pw2.name IS NOT NULL THEN pw2.name
+                    ELSE 'N/A'
+                END AS winner_team,
+                m.match_type, m.field_number
         FROM matches m
-        JOIN players pa ON m.player_a_id = pa.id
-        JOIN players pb ON m.player_b_id = pb.id
-        LEFT JOIN players pw ON m.winner_id = pw.id
+        JOIN players pa1 ON m.player_a1_id = pa1.id
+        LEFT JOIN players pa2 ON m.player_a2_id = pa2.id
+        JOIN players pb1 ON m.player_b1_id = pb1.id
+        LEFT JOIN players pb2 ON m.player_b2_id = pb2.id
+        LEFT JOIN players pw1 ON m.winner1_id = pw1.id
+        LEFT JOIN players pw2 ON m.winner2_id = pw2.id
         JOIN sessions s ON m.session_id = s.id
         ORDER BY m.date DESC
     ''')
     matches = cursor.fetchall()
     conn.close()
     return matches
+
 
 def get_performance_data():
     conn = sqlite3.connect(DATABASE)
@@ -204,7 +259,7 @@ def get_performance_data():
 
     # Calculate win rates
     performance_data = []
-    for name, elo, matches_played, skill in players:
+    for name, elo, matches_played in players:
         if matches_played == 0:
             win_rate = 'N/A'
         else:
@@ -212,13 +267,15 @@ def get_performance_data():
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT COUNT(*) FROM matches 
-                WHERE (player_a_id = (SELECT id FROM players WHERE name = ?) AND winner_id = player_a_id)
-                   OR (player_b_id = (SELECT id FROM players WHERE name = ?) AND winner_id = player_b_id)
-            ''', (name, name))
+                WHERE (player_a1_id = (SELECT id FROM players WHERE name = ?) AND winner1_id = player_a1_id)
+                   OR (player_a2_id = (SELECT id FROM players WHERE name = ?) AND winner2_id = player_a2_id)
+                   OR (player_b1_id = (SELECT id FROM players WHERE name = ?) AND winner1_id = player_b1_id)
+                   OR (player_b2_id = (SELECT id FROM players WHERE name = ?) AND winner2_id = player_b2_id)
+            ''', (name, name, name, name))
             wins = cursor.fetchone()[0]
             conn.close()
             win_rate = f"{(wins / matches_played * 100):.2f}%"
-        performance_data.append((name, round(elo,2), matches_played, skill, win_rate))
+        performance_data.append((name, round(elo, 2), matches_played, win_rate))
     return performance_data
 
 # Custom QListWidget for Assigned Players with Drag-and-Drop and Removal
@@ -577,14 +634,14 @@ class ScheduleSessionDialog(QDialog):
         # Assuming you have a QTableWidget for scores
         self.scores_table = QTableWidget()
         self.scores_table.setColumnCount(4)
-        self.scores_table.setHorizontalHeaderLabels(["Player A", "Player B", "Score A", "Score B"])
+        self.scores_table.setHorizontalHeaderLabels(["Team A", "Team B", "Score A", "Score B"])
 
         # Example: Adding a row with editable score columns
         row_position = self.scores_table.rowCount()
         self.scores_table.insertRow(row_position)
 
-        player_a_item = QTableWidgetItem("Player A Name")
-        player_b_item = QTableWidgetItem("Player B Name")
+        Team_a_item = QTableWidgetItem("Team A Name")
+        Team_b_item = QTableWidgetItem("Team B Name")
         score_a_item = QTableWidgetItem("")
         score_b_item = QTableWidgetItem()
 
@@ -592,8 +649,8 @@ class ScheduleSessionDialog(QDialog):
         score_a_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEditable | Qt.ItemIsEnabled)  # Make it editable
         score_b_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEditable | Qt.ItemIsEnabled)
 
-        self.scores_table.setItem(row_position, 0, player_a_item)
-        self.scores_table.setItem(row_position, 1, player_b_item)
+        self.scores_table.setItem(row_position, 0, Team_a_item)
+        self.scores_table.setItem(row_position, 1, Team_b_item)
         self.scores_table.setItem(row_position, 2, score_a_item)
         self.scores_table.setItem(row_position, 3, score_b_item)
 
@@ -635,7 +692,7 @@ class ScheduleSessionDialog(QDialog):
         for (name,) in players:
             item = QListWidgetItem(name)
             self.available_list.addItem(item)
-    
+
     def create_matchup(self):
         global date_str
         date_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # Current date
@@ -700,11 +757,11 @@ class ScheduleSessionDialog(QDialog):
                 else:
                     for i in range(0, len(players_for_fields), 4):
                         if i + 3 < len(players_for_fields):
-                            player_a = get_player_id(players_for_fields[i])
-                            player_b = get_player_id(players_for_fields[i + 1])
-                            player_c = get_player_id(players_for_fields[i + 2])
-                            player_d = get_player_id(players_for_fields[i + 3])
-                            matches.append((player_a, player_b, player_c, player_d))
+                            player_a1 = get_player_id(players_for_fields[i])
+                            player_a2 = get_player_id(players_for_fields[i + 1])
+                            player_b1 = get_player_id(players_for_fields[i + 2])
+                            player_b2 = get_player_id(players_for_fields[i + 3])
+                            matches.append((player_a1, player_a2, player_b1, player_b2))
 
                 field_number = 1
                 self.matchups_table.setRowCount(0)  # Clear any existing rows
@@ -715,7 +772,7 @@ class ScheduleSessionDialog(QDialog):
                         player_a_name = get_player_name_by_id(player_a_id) if player_a_id else "N/A"
                         player_b_name = get_player_name_by_id(player_b_id) if player_b_id else "N/A"
                         cursor.execute('''
-                            INSERT INTO matches (date, session_id, player_a_id, player_b_id, score_a, score_b, winner_id, match_type, field_number)
+                            INSERT INTO matches (date, session_id, player_a1_id, player_b1_id, score_a, score_b, winner1_id, match_type, field_number)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ''', (date_str, session_id, player_a_id, player_b_id, 1, 1, None, match_type, field_number))
                         row_position = self.matchups_table.rowCount()
@@ -726,6 +783,25 @@ class ScheduleSessionDialog(QDialog):
                         self.matchups_table.setItem(row_position, 3, QTableWidgetItem(""))  # Score A
                         self.matchups_table.setItem(row_position, 4, QTableWidgetItem(""))  # Score B
                     else:
+                        player_a1_id, player_a2_id, player_b1_id, player_b2_id = match
+                        player_a1_name = get_player_name_by_id(player_a1_id) if player_a1_id else "N/A"
+                        player_a2_name = get_player_name_by_id(player_a2_id) if player_a2_id else "N/A"
+                        player_b1_name = get_player_name_by_id(player_b1_id) if player_b1_id else "N/A"
+                        player_b2_name = get_player_name_by_id(player_b2_id) if player_b2_id else "N/A"
+                        team_a = f"({player_a1_name} & {player_a2_name})"
+                        team_b = f"({player_b1_name} & {player_b2_name})"
+                        cursor.execute('''
+                            INSERT INTO matches (date, session_id, player_a1_id, player_a2_id, player_b1_id, player_b2_id, score_a, score_b, winner1_id, winner2_id, match_type, field_number)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (date_str, session_id, player_a1_id, player_a2_id, player_b1_id, player_b2_id, 1, 1, None, None, match_type, field_number))
+                        row_position = self.matchups_table.rowCount()
+                        self.matchups_table.insertRow(row_position)
+                        self.matchups_table.setItem(row_position, 0, QTableWidgetItem(str(field_number)))
+                        self.matchups_table.setItem(row_position, 1, QTableWidgetItem(team_a))
+                        self.matchups_table.setItem(row_position, 2, QTableWidgetItem(team_b))
+                        self.matchups_table.setItem(row_position, 3, QTableWidgetItem(""))  # Score A
+                        self.matchups_table.setItem(row_position, 4, QTableWidgetItem(""))  # Score B
+
                         # Check if there are remaining players and available fields
                         remaining_players = len(players_for_fields) % required_players
                         if remaining_players >= 2 and field_number <= self.num_fields:
@@ -736,8 +812,9 @@ class ScheduleSessionDialog(QDialog):
                                     player_b = get_player_id(players_for_fields[-(i + 2)])
                                     player_a_name = get_player_name_by_id(player_a) if player_a else "N/A"
                                     player_b_name = get_player_name_by_id(player_b) if player_b else "N/A"
+                                    field_number += 1
                                     cursor.execute('''
-                                    INSERT INTO matches (date, session_id, player_a_id, player_b_id, score_a, score_b, winner_id, match_type, field_number)
+                                    INSERT INTO matches (date, session_id, player_a1_id, player_b1_id, score_a, score_b, winner1_id, match_type, field_number)
                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                                     ''', (date_str, session_id, player_a, player_b, 1, 1, None, 'Singles', field_number))
                                     row_position = self.matchups_table.rowCount()
@@ -747,38 +824,17 @@ class ScheduleSessionDialog(QDialog):
                                     self.matchups_table.setItem(row_position, 2, QTableWidgetItem(player_b_name))
                                     self.matchups_table.setItem(row_position, 3, QTableWidgetItem(""))  # Score A
                                     self.matchups_table.setItem(row_position, 4, QTableWidgetItem(""))  # Score B
-                                    field_number += 1
                                     # Remove paired players from the list to avoid duplication
                                     players_for_fields.pop(-(i + 1))
                                     players_for_fields.pop(-(i + 1))  # Note: index shifts after the first pop
                                     break
-    
-
-                        player_a_id, player_b_id, player_c_id, player_d_id = match
-                        player_a_name = get_player_name_by_id(player_a_id) if player_a_id else "N/A"
-                        player_b_name = get_player_name_by_id(player_b_id) if player_b_id else "N/A"
-                        player_c_name = get_player_name_by_id(player_c_id) if player_c_id else "N/A"
-                        player_d_name = get_player_name_by_id(player_d_id) if player_d_id else "N/A"
-                        cursor.execute('''
-                            INSERT INTO matches (date, session_id, player_a_id, player_b_id, score_a, score_b, winner_id, match_type, field_number)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (date_str, session_id, player_a_id, player_b_id, 1, 1, None, match_type, field_number))
-                        row_position = self.matchups_table.rowCount()
-                        self.matchups_table.insertRow(row_position)
-                        self.matchups_table.setItem(row_position, 0, QTableWidgetItem(str(field_number)))
-                        team_a = f"({player_a_name} & {player_b_name})"
-                        team_b = f"({player_c_name} & {player_d_name})"
-                        self.matchups_table.setItem(row_position, 1, QTableWidgetItem(team_a))
-                        self.matchups_table.setItem(row_position, 2, QTableWidgetItem(team_b))
-                        self.matchups_table.setItem(row_position, 3, QTableWidgetItem(""))  # Score A
-                        self.matchups_table.setItem(row_position, 4, QTableWidgetItem(""))  # Score B
-                    field_number += 1
-                    if field_number > self.num_fields:
-                        field_number = 1  # Cycle through fields if more than MAX_FIELDS matches
-
-                # Resize columns to fit the content
+                        field_number += 1
+                        if field_number > self.num_fields:
+                            field_number = 1  # Cycle through fields if more than MAX_FIELDS matches
+                    # Resize columns to fit the content
                 for column in range(self.matchups_table.columnCount()):
                     self.matchups_table.resizeColumnToContents(column)
+
 
                 if bench_players:
                     QMessageBox.information(self, 'Bench Players', f"The following players are on the bench:\n{', '.join(bench_players)}")
@@ -789,8 +845,6 @@ class ScheduleSessionDialog(QDialog):
 
         except sqlite3.OperationalError as e:
             QMessageBox.critical(self, 'Database Error', f'An error occurred while accessing the database: {str(e)}')
-
-
 
     def submit_scores(self):
         row_count = self.matchups_table.rowCount()
@@ -819,83 +873,48 @@ class ScheduleSessionDialog(QDialog):
                 score_a = 0
             if score_b == 'N/A':
                 score_b = 0
-
-
             # Validate scores
             if not score_a.isdigit() or not score_b.isdigit():
                 QMessageBox.warning(self, 'Input Error', f'Please enter valid scores for Field {field_number}.')
                 return
 
-
             # Determine winner
-            if score_a > score_b:
-                winner = team_a
-            elif score_b > score_a:
-                winner = team_b
+            if int(score_a) > int(score_b):
+                winner_team = team_a
+            elif int(score_b) > int(score_a):
+                winner_team = team_b
             else:
-                winner = None  # Handle draw if necessary
+                winner_team = None  # Handle draw if necessary
 
             # Fetch match_id from the database based on field_number
             cursor.execute('''
-                SELECT id FROM matches
-                WHERE field_number = ? AND date = ?
-            ''', (field_number, date_str))
+                            SELECT id, player_a1_id, player_a2_id, player_b1_id, player_b2_id, match_type FROM matches
+                            WHERE field_number = ? AND date = ? 
+                        ''', (field_number, date_str))
             match = cursor.fetchone()
-            
             if match:
-                match_id = match[0]
-                # Fetch player IDs based on team names
-                if ' & ' in team_a and ' & ' in team_b:
-                    # Doubles
-                    players_a = team_a.replace('(', '').replace(')', '').split(' & ')
-                    players_b = team_b.replace('(', '').replace(')', '').split(' & ')
-                    player_a1_id = get_player_id(players_a[0])
-                    player_a2_id = get_player_id(players_a[1])
-                    player_b1_id = get_player_id(players_b[0])
-                    player_b2_id = get_player_id(players_b[1])
+                match_id, player_a1_id, player_a2_id, player_b1_id, player_b2_id, match_type = match
 
-                    # Update match scores and winner_id
-                    if winner == team_a:
-                        cursor.execute('''
-                            UPDATE matches
-                            SET score_a = ?, score_b = ?, winner_id = ?
-                            WHERE id = ?
-                        ''', (score_a, score_b, player_a1_id, match_id))
-                    elif winner == team_b:
-                        cursor.execute('''
-                            UPDATE matches
-                            SET score_a = ?, score_b = ?, winner_id = ?
-                            WHERE id = ?
-                        ''', (score_a, score_b, player_b1_id, match_id))
-                    else:
-                        # Handle draw if necessary
-                        cursor.execute('''
-                            UPDATE matches
-                            SET score_a = ?, score_b = ?, winner_id = NULL
-                            WHERE id = ?
-                        ''', (score_a, score_b, match_id))
+                # Update match scores and winner_id
+                if winner_team == team_a:
+                    winner1_id, winner2_id = player_a1_id, player_a2_id
+                elif winner_team == team_b:
+                    winner1_id, winner2_id = player_b1_id, player_b2_id
                 else:
-                    # Singles
-                    player_a_id = get_player_id(team_a)
-                    player_b_id = get_player_id(team_b)
-                    if winner == team_a:
-                        cursor.execute('''
-                            UPDATE matches
-                            SET score_a = ?, score_b = ?, winner_id = ?
-                            WHERE id = ?
-                        ''', (score_a, score_b, player_a_id, match_id))
-                    elif winner == team_b:
-                        cursor.execute('''
-                            UPDATE matches
-                            SET score_a = ?, score_b = ?, winner_id = ?
-                            WHERE id = ?
-                        ''', (score_a, score_b, player_b_id, match_id))
-                    else:
-                        cursor.execute('''
-                            UPDATE matches
-                            SET score_a = ?, score_b = ?, winner_id = NULL
-                            WHERE id = ?
-                        ''', (score_a, score_b, match_id))
+                    winner1_id, winner2_id = None, None  # Handle draw if necessary
+
+                if match_type == 'Singles':
+                    cursor.execute('''
+                        UPDATE matches
+                        SET score_a = ?, score_b = ?, winner1_id = ?, winner2_id = NULL
+                        WHERE id = ?
+                    ''', (score_a, score_b, winner1_id, match_id))
+                else:
+                    cursor.execute('''
+                        UPDATE matches
+                        SET score_a = ?, score_b = ?, winner1_id = ?, winner2_id = ?
+                        WHERE id = ?
+                    ''', (score_a, score_b, winner1_id, winner2_id, match_id))
             
         conn.commit()
         conn.close()
@@ -904,16 +923,14 @@ class ScheduleSessionDialog(QDialog):
         self.update_elo_ratings()
 
         QMessageBox.information(self, 'Success', 'Scores submitted and records updated successfully.')
-        
 
-    
     def update_elo_ratings(self):
         conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
 
         # Fetch all matches in the latest session
         cursor.execute('''
-            SELECT id, player_a_id, player_b_id, score_a, score_b, winner_id, match_type, field_number
+            SELECT id, player_a1_id, player_a2_id, player_b1_id, player_b2_id, score_a, score_b, winner1_id, winner2_id, match_type, field_number
             FROM matches
             WHERE session_id = (
                 SELECT id FROM sessions ORDER BY id DESC LIMIT 1
@@ -922,26 +939,31 @@ class ScheduleSessionDialog(QDialog):
         matches = cursor.fetchall()
 
         for match in matches:
-            match_id, player_a_id, player_b_id, score_a, score_b, winner_id, match_type, field_number = match
+            match_id, player_a1_id, player_a2_id, player_b1_id, player_b2_id, score_a, score_b, winner1_id, winner2_id, match_type, field_number = match
             # Update Elo based on the scores
             if match_type == 'Singles':
                 if score_a > score_b:
-                    winner = player_a_id
+                    winner1_id = player_a1_id
+                    winner2_id = None
                 elif score_b > score_a:
-                    winner = player_b_id
+                    winner1_id = player_b1_id
+                    winner2_id = None
                 else:
-                    winner = None  # Draw
-                update_elo(player_a_id, player_b_id, winner, session_id=None, match_type=match_type, field_number=field_number)
+                    winner1_id = None
+                    winner2_id = None  # Draw
+                update_elo(player_a1_id, None, player_b1_id, None, winner1_id, winner2_id, session_id=None, match_type=match_type, field_number=field_number)
             else:
                 # For doubles, determine winner based on team scores
-                # Assuming team A is players_a and team B is players_b
                 if score_a > score_b:
-                    winner = player_a_id  # You can choose how to handle team wins
+                    winner1_id = player_a1_id
+                    winner2_id = player_a2_id
                 elif score_b > score_a:
-                    winner = player_b_id
+                    winner1_id = player_b1_id
+                    winner2_id = player_b2_id
                 else:
-                    winner = None  # Draw
-                update_elo(player_a_id, player_b_id, winner, session_id=None, match_type=match_type, field_number=field_number)
+                    winner1_id = None
+                    winner2_id = None  # Draw
+                update_elo(player_a1_id, player_a2_id, player_b1_id, player_b2_id, winner1_id, winner2_id, session_id=None, match_type=match_type, field_number=field_number)
 
         conn.close()
 
@@ -1034,7 +1056,7 @@ class MatchHistoryWindow(QDialog):
         self.table = QTableWidget()
         self.table.setColumnCount(9)
         self.table.setHorizontalHeaderLabels([
-            'Date', 'Session', 'Player A', 'Player B',
+            'Date', 'Session', 'Team A', 'Team B',
             'Score A', 'Score B', 'Winner', 'Match Type', 'Field Number'
         ])
         self.load_match_history()
@@ -1045,16 +1067,17 @@ class MatchHistoryWindow(QDialog):
     def load_match_history(self):
         matches = get_match_history()
         self.table.setRowCount(len(matches))
-        for row_idx, (date, session, pa, pb, sa, sb, pw, mt, fn) in enumerate(matches):
+        for row_idx, match in enumerate(matches):
+            date, session, teamA, teamB, ScoreA, ScoreB, Winners, MatchType, FieldNumber = match[:9]  # Adjust this line based on the actual number of values returned
             self.table.setItem(row_idx, 0, QTableWidgetItem(date))
             self.table.setItem(row_idx, 1, QTableWidgetItem(session))
-            self.table.setItem(row_idx, 2, QTableWidgetItem(pa))
-            self.table.setItem(row_idx, 3, QTableWidgetItem(pb))
-            self.table.setItem(row_idx, 4, QTableWidgetItem(str(sa)))
-            self.table.setItem(row_idx, 5, QTableWidgetItem(str(sb)))
-            self.table.setItem(row_idx, 6, QTableWidgetItem(pw if pw else "N/A"))
-            self.table.setItem(row_idx, 7, QTableWidgetItem(mt))
-            self.table.setItem(row_idx, 8, QTableWidgetItem(str(fn) if fn else 'N/A'))
+            self.table.setItem(row_idx, 2, QTableWidgetItem(teamA))
+            self.table.setItem(row_idx, 3, QTableWidgetItem(teamB))
+            self.table.setItem(row_idx, 4, QTableWidgetItem(str(ScoreA)))
+            self.table.setItem(row_idx, 5, QTableWidgetItem(str(ScoreB)))
+            self.table.setItem(row_idx, 6, QTableWidgetItem(Winners if Winners else "N/A"))
+            self.table.setItem(row_idx, 7, QTableWidgetItem(MatchType))
+            self.table.setItem(row_idx, 8, QTableWidgetItem(str(FieldNumber) if FieldNumber else 'N/A'))
 
 
 # Main Application Window
@@ -1122,3 +1145,27 @@ if __name__ == "__main__":
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
+
+
+
+import sqlite3
+DATABASE = 'badminton_app.db'
+def print_match_table():
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT * FROM matches')
+    matches = cursor.fetchall()
+    
+    # Print column headers
+    headers = [description[0] for description in cursor.description]
+    print("\t".join(headers))
+    
+    # Print each row
+    for match in matches:
+        print("\t".join(map(str, match)))
+    
+    conn.close()
+
+# Call the function to print the match table
+print_match_table()
