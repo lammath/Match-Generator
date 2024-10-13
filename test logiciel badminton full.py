@@ -22,6 +22,7 @@ def init_db():
     
     #cursor.execute('''DROP TABLE IF EXISTS matches''')
     #cursor.execute('''DROP TABLE IF EXISTS sessions''')
+    #cursor.execute('''DROP TABLE IF EXISTS players''')
     
     # Create players table
     cursor.execute('''
@@ -385,10 +386,29 @@ class ManagePlayersDialog(QDialog):
 
 
     def import_players_from_csv(self):
-        dialog = ImportPlayersDialog(self)
-        if dialog.exec_() == QDialog.Accepted:
-            self.load_players()  # Reload players after importing
-            self.refresh_available_players()  # Refresh available players list
+        options = QFileDialog.Options()
+        file_name, _ = QFileDialog.getOpenFileName(self, "Open CSV File", "", "CSV Files (*.csv);;All Files (*)", options=options)
+        if file_name:
+            try:
+                with open(file_name, newline='') as csvfile:
+                    reader = csv.reader(csvfile)
+                    headers = next(reader)  # Skip the header row
+                    conn = sqlite3.connect(DATABASE)
+                    cursor = conn.cursor()
+                    for row in reader:
+                        player_id = int(row[0])
+                        name = row[1]
+                        elo_rating = float(row[2]) if row[2] else 1500  # Default ELO rating
+                        cursor.execute('''
+                            INSERT OR IGNORE INTO players (id, name, elo_rating)
+                            VALUES (?, ?, ?)
+                        ''', (player_id, name, elo_rating))
+                    conn.commit()
+                    conn.close()
+                    QMessageBox.information(self, 'Success', 'Players imported successfully.')
+                    self.load_players()  # Refresh the UI to show the newly imported players
+            except Exception as e:
+                QMessageBox.critical(self, 'Error', f'An error occurred while importing players: {str(e)}')
 
     def export_players_info(self):
         conn = sqlite3.connect(DATABASE)
