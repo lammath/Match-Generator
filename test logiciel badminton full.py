@@ -276,7 +276,7 @@ def get_performance_data():
             wins = cursor.fetchone()[0]
             conn.close()
             win_rate = f"{(wins / matches_played * 100):.2f}%"
-        performance_data.append((name, round(elo, 2), matches_played, win_rate))
+        performance_data.append((name, int(elo), matches_played, win_rate))
     return performance_data
 
 # Custom QListWidget for Assigned Players with Drag-and-Drop and Removal
@@ -398,7 +398,7 @@ class ManagePlayersDialog(QDialog):
                     for row in reader:
                         player_id = int(row[0])
                         name = row[1]
-                        elo_rating = float(row[2]) if row[2] else 1500  # Default ELO rating
+                        elo_rating = int(row[2]) if row[2] else 1500  # Default ELO rating
                         cursor.execute('''
                             INSERT OR IGNORE INTO players (id, name, elo_rating)
                             VALUES (?, ?, ?)
@@ -466,7 +466,7 @@ class ManagePlayersDialog(QDialog):
         for row, (id, name, elo) in enumerate(players):
             self.table.setItem(row, 0, QTableWidgetItem(str(id)))
             self.table.setItem(row, 1, QTableWidgetItem(name))
-            self.table.setItem(row, 2, QTableWidgetItem(str(elo)))
+            self.table.setItem(row, 2, QTableWidgetItem(str(int(elo))))
         
         conn.close()
 
@@ -583,7 +583,7 @@ class ImportPlayersDialog(QDialog):
                     name = row['name'].strip()
                     cursor.execute('''
                         INSERT OR IGNORE INTO players (name, elo_rating)
-                        VALUES (?, ?, ?, ?)
+                        VALUES (?, ?)
                     ''', (name, elo))
                 conn.commit()
                 conn.close()
@@ -1016,7 +1016,7 @@ class LeaderboardWindow(QDialog):
         self.table.setRowCount(len(performance_data))
         for row_idx, (name, elo, MatchesPlayed, WinRate) in enumerate(performance_data):
             self.table.setItem(row_idx, 0, QTableWidgetItem(name))
-            self.table.setItem(row_idx, 1, QTableWidgetItem(str(round(elo,2))))
+            self.table.setItem(row_idx, 1, QTableWidgetItem(str(int(elo))))
             self.table.setItem(row_idx, 2, QTableWidgetItem(str(MatchesPlayed)))
             self.table.setItem(row_idx, 3, QTableWidgetItem(WinRate))
 
