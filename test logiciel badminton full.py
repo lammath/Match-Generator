@@ -643,7 +643,7 @@ class ScheduleSessionDialog(QDialog):
     def create_matchup(self):
         match_type = self.match_type_combo.currentText()
 
-        date_str = datetime.now().strftime('%Y-%m-%d')  # Current date
+        date_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # Current date
 
         assigned_players = []
         for index in range(self.assigned_list.count()):
@@ -665,9 +665,12 @@ class ScheduleSessionDialog(QDialog):
         total_assigned = len(assigned_players)
 
         if total_assigned > max_players:
-            # Assign only up to max_players to fields, rest to bench
+            #Assign only up to max_players to fields, rest to bench
             players_for_fields = assigned_players[:max_players]
             bench_players = assigned_players[max_players:]
+        elif total_assigned % 2 !=0:
+            players_for_fields = assigned_players[:-1]
+            bench_players = assigned_players[-1:]
         else:
             players_for_fields = assigned_players
             bench_players = []
@@ -752,6 +755,7 @@ class ScheduleSessionDialog(QDialog):
                                     players_for_fields.pop(-(i + 1))
                                     players_for_fields.pop(-(i + 1))  # Note: index shifts after the first pop
                                     break
+                        print(players_for_fields)
 
                         player_a_id, player_b_id, player_c_id, player_d_id = match
                         player_a_name = get_player_name_by_id(player_a_id) if player_a_id else "N/A"
