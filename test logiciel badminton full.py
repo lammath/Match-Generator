@@ -20,6 +20,13 @@ DATABASE = 'badminton_app.db'
 def init_db():
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
+
+    cursor.execute('''
+    DROP TABLE IF EXISTS matches
+    ''')
+    cursor.execute('''
+    DROP TABLE IF EXISTS sessions
+    ''')
     
     # Create players table
     cursor.execute('''
@@ -201,7 +208,7 @@ def get_performance_data():
 
     # Calculate win rates
     performance_data = []
-    for name, elo, matches_played in players:
+    for name, elo, matches_played, skill in players:
         if matches_played == 0:
             win_rate = 'N/A'
         else:
@@ -215,7 +222,7 @@ def get_performance_data():
             wins = cursor.fetchone()[0]
             conn.close()
             win_rate = f"{(wins / matches_played * 100):.2f}%"
-        performance_data.append((name, round(elo,0), matches_played, win_rate))
+        performance_data.append((name, round(elo,2), matches_played, skill, win_rate))
     return performance_data
 
 # Custom QListWidget for Assigned Players with Drag-and-Drop and Removal
@@ -386,7 +393,7 @@ class ManagePlayersDialog(QDialog):
         for row, (id, name, elo) in enumerate(players):
             self.table.setItem(row, 0, QTableWidgetItem(str(id)))
             self.table.setItem(row, 1, QTableWidgetItem(name))
-            self.table.setItem(row, 2, QTableWidgetItem(str(round(elo,0))))
+            self.table.setItem(row, 2, QTableWidgetItem(str(elo)))
         
         conn.close()
 
@@ -463,8 +470,7 @@ class AddPlayerDialog(QDialog):
 
 class ImportPlayersDialog(QDialog):
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def initUI(self):
         layout = QVBoxLayout()
 
         self.file_label = QLabel('Select CSV File:')
@@ -501,13 +507,11 @@ class ImportPlayersDialog(QDialog):
                 conn = sqlite3.connect(DATABASE)
                 cursor = conn.cursor()
                 for row in reader:
-                    name = row.get('Name', '').strip()
-                    elo_rating = row.get('Elo Rating', '')
-                    win_rate = row.get('Win Rate', '')
+                    name = row['name'].strip()
                     cursor.execute('''
-                        INSERT OR IGNORE INTO players (name, elo_rating, win_rate)
-                        VALUES (?, ?, ?)
-                    ''', (name, elo_rating, win_rate))
+                        INSERT OR IGNORE INTO players (name, elo_rating)
+                        VALUES (?, ?, ?, ?)
+                    ''', (name, elo))
                 conn.commit()
                 conn.close()
             QMessageBox.information(self, 'Success', 'Players imported successfully.')
@@ -809,13 +813,20 @@ class ScheduleSessionDialog(QDialog):
             score_a = score_a_item.text()
             score_b = score_b_item.text()
 
+            # Replace 'N/A' with 0
+            if score_a == 'N/A':
+                score_a = 0
+            if score_b == 'N/A':
+                score_b = 0
+
+            print(score_a)
+            print(score_b)
+
             # Validate scores
             if not score_a.isdigit() or not score_b.isdigit():
                 QMessageBox.warning(self, 'Input Error', f'Please enter valid scores for Field {field_number}.')
                 return
 
-            score_a = int(score_a)
-            score_b = int(score_b)
 
             # Determine winner
             if score_a > score_b:
@@ -834,8 +845,10 @@ class ScheduleSessionDialog(QDialog):
             
             if match:
                 match_id = match[0]
+                print("Match id : ", match_id)
                 # Fetch player IDs based on team names
                 if ' & ' in team_a and ' & ' in team_b:
+                    print("ligne 837 fonctionne")
                     # Doubles
                     players_a = team_a.replace('(', '').replace(')', '').split(' & ')
                     players_b = team_b.replace('(', '').replace(')', '').split(' & ')
@@ -864,6 +877,7 @@ class ScheduleSessionDialog(QDialog):
                             SET score_a = ?, score_b = ?, winner_id = NULL
                             WHERE id = ?
                         ''', (score_a, score_b, match_id))
+                    print(match_id)
                 else:
                     # Singles
                     player_a_id = get_player_id(team_a)
@@ -962,9 +976,9 @@ class LeaderboardWindow(QDialog):
     def load_leaderboard(self):
         performance_data = get_performance_data()
         self.table.setRowCount(len(performance_data))
-        for row_idx, (name, elo, mp, wr) in enumerate(performance_data):
+        for row_idx, (name, elo, mp, skill, wr) in enumerate(performance_data):
             self.table.setItem(row_idx, 0, QTableWidgetItem(name))
-            self.table.setItem(row_idx, 1, QTableWidgetItem(str(round(elo,0))))
+            self.table.setItem(row_idx, 1, QTableWidgetItem(str(round(elo,2))))
             self.table.setItem(row_idx, 2, QTableWidgetItem(str(mp)))
             self.table.setItem(row_idx, 3, QTableWidgetItem(wr))
 
@@ -1003,11 +1017,12 @@ class PerformanceTrackingWindow(QDialog):
     def load_performance_data(self):
         performance_data = get_performance_data()
         self.table.setRowCount(len(performance_data))
-        for row_idx, (name, elo, mp, wr) in enumerate(performance_data):
+        for row_idx, (name, elo, mp, skill, wr) in enumerate(performance_data):
             self.table.setItem(row_idx, 0, QTableWidgetItem(name))
-            self.table.setItem(row_idx, 1, QTableWidgetItem(str(round(elo,0))))
+            self.table.setItem(row_idx, 1, QTableWidgetItem(str(elo)))
             self.table.setItem(row_idx, 2, QTableWidgetItem(str(mp)))
-            self.table.setItem(row_idx, 3, QTableWidgetItem(wr))
+            self.table.setItem(row_idx, 3, QTableWidgetItem(skill))
+            self.table.setItem(row_idx, 4, QTableWidgetItem(wr))
 
 
 class MatchHistoryWindow(QDialog):
