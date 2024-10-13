@@ -994,11 +994,11 @@ class LeaderboardWindow(QDialog):
     def load_leaderboard(self):
         performance_data = get_performance_data()
         self.table.setRowCount(len(performance_data))
-        for row_idx, (name, elo, mp, skill, wr) in enumerate(performance_data):
+        for row_idx, (name, elo, MatchesPlayed, WinRate) in enumerate(performance_data):
             self.table.setItem(row_idx, 0, QTableWidgetItem(name))
             self.table.setItem(row_idx, 1, QTableWidgetItem(str(round(elo,2))))
-            self.table.setItem(row_idx, 2, QTableWidgetItem(str(mp)))
-            self.table.setItem(row_idx, 3, QTableWidgetItem(wr))
+            self.table.setItem(row_idx, 2, QTableWidgetItem(str(MatchesPlayed)))
+            self.table.setItem(row_idx, 3, QTableWidgetItem(WinRate))
 
     def export_leaderboard(self):
         file_path, _ = QFileDialog.getSaveFileName(self, 'Save File', '', 'CSV(*.csv)')
@@ -1035,12 +1035,11 @@ class PerformanceTrackingWindow(QDialog):
     def load_performance_data(self):
         performance_data = get_performance_data()
         self.table.setRowCount(len(performance_data))
-        for row_idx, (name, elo, mp, skill, wr) in enumerate(performance_data):
+        for row_idx, (name, elo, MatchesPlayed, WinRate) in enumerate(performance_data):
             self.table.setItem(row_idx, 0, QTableWidgetItem(name))
             self.table.setItem(row_idx, 1, QTableWidgetItem(str(elo)))
-            self.table.setItem(row_idx, 2, QTableWidgetItem(str(mp)))
-            self.table.setItem(row_idx, 3, QTableWidgetItem(skill))
-            self.table.setItem(row_idx, 4, QTableWidgetItem(wr))
+            self.table.setItem(row_idx, 2, QTableWidgetItem(str(MatchesPlayed)))
+            self.table.setItem(row_idx, 3, QTableWidgetItem(WinRate))
 
 
 class MatchHistoryWindow(QDialog):
