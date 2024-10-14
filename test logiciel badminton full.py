@@ -695,8 +695,26 @@ class ScheduleSessionDialog(QDialog):
         self.submit_scores_button.setEnabled(True)  # Disabled until a session is scheduled
         layout.addWidget(self.submit_scores_button)
 
+        # Add search bar for available players
+        self.search_bar = QLineEdit(self)
+        self.search_bar.setPlaceholderText("Search for players...")
+        self.search_bar.textChanged.connect(self.filter_available_players)
+        layout.addWidget(self.search_bar)
+        
+        # Player lists
+        self.available_players_list = QListWidget(self)
+        self.assigned_players_list = QListWidget(self)
+
+        # Call method to populate players lists
+        self.populate_available_players()
+
         self.setLayout(layout)
 
+    def filter_available_players(self):
+        search_text = self.search_bar.text().lower()
+        for i in range(self.available_players_list.count()):
+            item = self.available_players_list.item(i)
+            item.setHidden(search_text not in item.text().lower())
     
     def populate_available_players(self):
         conn = sqlite3.connect(DATABASE)
@@ -709,9 +727,11 @@ class ScheduleSessionDialog(QDialog):
         conn.close()
 
         self.available_list.clear()
+        #for (name, elo,) in players:
         for (name,) in players:
             item = QListWidgetItem(name)
-            self.available_list.addItem(item)
+            #self.available_list.addItem(f"{name} ({int(elo)})")
+            self.available_list.addItem(name)
 
     def create_matchup(self):
         global date_str
