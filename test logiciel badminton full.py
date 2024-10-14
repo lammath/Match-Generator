@@ -601,7 +601,7 @@ class ScheduleSessionDialog(QDialog):
         self.setGeometry(100, 100, 900, 700)
         self.session_id = None
         self.initUI()
-    
+
     def initUI(self):
         layout = QVBoxLayout()
 
@@ -631,10 +631,18 @@ class ScheduleSessionDialog(QDialog):
         # Available Players List
         available_layout = QVBoxLayout()
         available_label = QLabel('Available Players:')
+        
+        # Add search bar for available players
+        self.search_bar = QLineEdit(self)
+        self.search_bar.setPlaceholderText("Search for players...")
+        self.search_bar.textChanged.connect(self.filter_available_players)
+        
+        # Add search bar to the available_layout
+        available_layout.addWidget(available_label)
+        available_layout.addWidget(self.search_bar)  # Add search bar here
         self.available_list = QListWidget()
         self.available_list.setSelectionMode(QAbstractItemView.MultiSelection)
         self.available_list.setDragEnabled(True)
-        available_layout.addWidget(available_label)
         available_layout.addWidget(self.available_list)
         drag_drop_layout.addLayout(available_layout)
 
@@ -695,43 +703,27 @@ class ScheduleSessionDialog(QDialog):
         self.submit_scores_button.setEnabled(True)  # Disabled until a session is scheduled
         layout.addWidget(self.submit_scores_button)
 
-        # Add search bar for available players
-        self.search_bar = QLineEdit(self)
-        self.search_bar.setPlaceholderText("Search for players...")
-        self.search_bar.textChanged.connect(self.filter_available_players)
-        layout.addWidget(self.search_bar)
-        
-        # Player lists
-        self.available_players_list = QListWidget(self)
-        self.assigned_players_list = QListWidget(self)
-
-        # Call method to populate players lists
-        self.populate_available_players()
-
         self.setLayout(layout)
 
     def filter_available_players(self):
         search_text = self.search_bar.text().lower()
-        for i in range(self.available_players_list.count()):
-            item = self.available_players_list.item(i)
+        for i in range(self.available_list.count()):  # Use self.available_list here
+            item = self.available_list.item(i)
             item.setHidden(search_text not in item.text().lower())
-    
+
     def populate_available_players(self):
         conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
         today_day = datetime.now().strftime('%A')
-        cursor.execute('''
-            SELECT name FROM players
-        ''')
+        cursor.execute('''SELECT name FROM players''')
         players = cursor.fetchall()
         conn.close()
 
         self.available_list.clear()
-        #for (name, elo,) in players:
         for (name,) in players:
             item = QListWidgetItem(name)
-            #self.available_list.addItem(f"{name} ({int(elo)})")
-            self.available_list.addItem(name)
+            self.available_list.addItem(item)  # Ensure you add the item correctly
+
 
     def create_matchup(self):
         global date_str
