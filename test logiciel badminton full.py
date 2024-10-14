@@ -23,7 +23,7 @@ def init_db():
     #cursor.execute('''DROP TABLE IF EXISTS matches''')
     #cursor.execute('''DROP TABLE IF EXISTS sessions''')
     #cursor.execute('''DROP TABLE IF EXISTS players''')
-    
+
     # Create players table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS players (
@@ -34,8 +34,6 @@ def init_db():
             last_played DATETIME
         )
     ''')
-    
-    
 
     # Create sessions table
     cursor.execute('''
@@ -92,20 +90,23 @@ def update_elo(player_a1_id, player_a2_id, player_b1_id, player_b2_id, winner1_i
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
 
-    # Fetch current ratings and match counts
-    cursor.execute('SELECT elo_rating, matches_played FROM players WHERE id = ?', (player_a1_id,))
-    result_a1 = cursor.fetchone()
-    if not result_a1:
-        conn.close()
-        return
-    rating_a1, matches_a1 = result_a1
+    # Fetch current ratings and match counts for each player (handle None for singles matches)
+    if player_a1_id:
+        cursor.execute('SELECT elo_rating, matches_played FROM players WHERE id = ?', (player_a1_id,))
+        result_a1 = cursor.fetchone()
+        if not result_a1:
+            conn.close()
+            return
+        rating_a1, matches_a1 = result_a1
+    else:
+        rating_a1, matches_a1 = 0, 0
 
-    cursor.execute('SELECT elo_rating, matches_played FROM players WHERE id = ?', (player_a2_id,))
-    result_a2 = cursor.fetchone()
-    if not result_a2:
-        conn.close()
-        return
-    rating_a2, matches_a2 = result_a2
+    if player_a2_id:  # Optional for singles
+        cursor.execute('SELECT elo_rating, matches_played FROM players WHERE id = ?', (player_a2_id,))
+        result_a2 = cursor.fetchone()
+        rating_a2, matches_a2 = result_a2
+    else:
+        rating_a2, matches_a2 = rating_a1, matches_a1  # Copy values for singles
 
     cursor.execute('SELECT elo_rating, matches_played FROM players WHERE id = ?', (player_b1_id,))
     result_b1 = cursor.fetchone()
@@ -114,21 +115,24 @@ def update_elo(player_a1_id, player_a2_id, player_b1_id, player_b2_id, winner1_i
         return
     rating_b1, matches_b1 = result_b1
 
-    cursor.execute('SELECT elo_rating, matches_played FROM players WHERE id = ?', (player_b2_id,))
-    result_b2 = cursor.fetchone()
-    if not result_b2:
-        conn.close()
-        return
-    rating_b2, matches_b2 = result_b2
+    if player_b2_id:  # Optional for singles
+        cursor.execute('SELECT elo_rating, matches_played FROM players WHERE id = ?', (player_b2_id,))
+        result_b2 = cursor.fetchone()
+        rating_b2, matches_b2 = result_b2
+    else:
+        rating_b2, matches_b2 = rating_b1, matches_b1  # Copy values for singles
 
-    # Calculate expected scores
-    expected_a = calculate_expected_score(rating_a1, rating_a2, rating_b1, rating_b2)
+    # Calculate expected scores (handle both singles and doubles cases)
+    if match_type == 'Doubles':
+        expected_a = calculate_expected_score(rating_a1, rating_a2, rating_b1, rating_b2)
+    else:  # Singles
+        expected_a = calculate_expected_score(rating_a1, 0, rating_b1, 0)  # Only 1 player per team
     expected_b = 1 - expected_a
 
-    # Determine actual scores
-    if winner1_id == player_a1_id and winner2_id == player_a2_id:
+    # Determine actual scores based on winners
+    if winner1_id == player_a1_id and (match_type == 'Singles' or winner2_id == player_a2_id):
         score_a, score_b = 1, 0
-    elif winner1_id == player_b1_id and winner2_id == player_b2_id:
+    elif winner1_id == player_b1_id and (match_type == 'Singles' or winner2_id == player_b2_id):
         score_a, score_b = 0, 1
     else:
         score_a, score_b = 0.5, 0.5  # Handle draw if necessary
@@ -143,27 +147,34 @@ def update_elo(player_a1_id, player_a2_id, player_b1_id, player_b2_id, winner1_i
     new_rating_b1 = rating_b1 + k_b * (score_b - expected_b)
     new_rating_b2 = rating_b2 + k_b * (score_b - expected_b)
 
-    # Update players' ratings and match counts
+    # Update players' ratings, match counts, and last_played field (handle both singles and doubles)
+    date_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
     cursor.execute('''
         UPDATE players 
-        SET elo_rating = ?, matches_played = ?
+        SET elo_rating = ?, matches_played = ?, last_played = ?
         WHERE id = ?
-    ''', (new_rating_a1, matches_a1 + 1, player_a1_id))
+    ''', (new_rating_a1, matches_a1 + 1, date_str, player_a1_id))
+
+    if match_type == 'Doubles':  # Update player_a2 only in doubles
+        cursor.execute('''
+            UPDATE players 
+            SET elo_rating = ?, matches_played = ?, last_played = ?
+            WHERE id = ?
+        ''', (new_rating_a2, matches_a2 + 1, date_str, player_a2_id))
+
     cursor.execute('''
         UPDATE players 
-        SET elo_rating = ?, matches_played = ?
+        SET elo_rating = ?, matches_played = ?, last_played = ?
         WHERE id = ?
-    ''', (new_rating_a2, matches_a2 + 1, player_a2_id))
-    cursor.execute('''
-        UPDATE players 
-        SET elo_rating = ?, matches_played = ?
-        WHERE id = ?
-    ''', (new_rating_b1, matches_b1 + 1, player_b1_id))
-    cursor.execute('''
-        UPDATE players 
-        SET elo_rating = ?, matches_played = ?
-        WHERE id = ?
-    ''', (new_rating_b2, matches_b2 + 1, player_b2_id))
+    ''', (new_rating_b1, matches_b1 + 1, date_str, player_b1_id))
+
+    if match_type == 'Doubles':  # Update player_b2 only in doubles
+        cursor.execute('''
+            UPDATE players 
+            SET elo_rating = ?, matches_played = ?, last_played = ?
+            WHERE id = ?
+        ''', (new_rating_b2, matches_b2 + 1, date_str, player_b2_id))
 
     # Record the match
     cursor.execute('''
@@ -714,15 +725,24 @@ class ScheduleSessionDialog(QDialog):
     def populate_available_players(self):
         conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
-        today_day = datetime.now().strftime('%A')
-        cursor.execute('''SELECT name FROM players''')
+
+        # Modify the query to select players and order by last_participation (DESC to get most recent first)
+        cursor.execute('''
+            SELECT name, last_played
+            FROM players
+            ORDER BY last_played DESC
+        ''')
         players = cursor.fetchall()
         conn.close()
 
         self.available_list.clear()
-        for (name,) in players:
+
+        # Add players to the available list, most recent first
+        for (name, last_played) in players:
             item = QListWidgetItem(name)
-            self.available_list.addItem(item)  # Ensure you add the item correctly
+            self.available_list.addItem(item)
+            print(f"Player: {name}, Last Participation: {last_played}")
+
 
 
     def create_matchup(self):
