@@ -322,7 +322,7 @@ class AssignedPlayersList(QListWidget):
         # Clear the assigned list and re-populate it
         self.clear()
         for player_name, elo_rating in self.players:
-            self.addItem(f"{player_name} (ELO: {elo_rating})")
+            self.addItem(f"{player_name} ({int(elo_rating)})")
 
     def get_player_elo_rating(self, player_name):
         conn = sqlite3.connect(DATABASE)
@@ -823,7 +823,7 @@ class ScheduleSessionDialog(QDialog):
                             player_a = get_player_id(players_for_fields[i])
                             player_b = get_player_id(players_for_fields[i + 1])
                             matches.append((player_a, player_b))
-                else:
+                else:  # Double matches
                     for i in range(0, len(players_for_fields), 4):
                         if i + 3 < len(players_for_fields):
                             player_a1 = get_player_id(players_for_fields[i])
@@ -835,6 +835,7 @@ class ScheduleSessionDialog(QDialog):
                 field_number = 1
                 self.matchups_table.setRowCount(0)  # Clear any existing rows
 
+                # Handle matches
                 for match in matches:
                     if match_type == 'Singles':
                         player_a_id, player_b_id = match
@@ -843,7 +844,7 @@ class ScheduleSessionDialog(QDialog):
                         cursor.execute('''
                             INSERT INTO matches (date, session_id, player_a1_id, player_b1_id, score_a, score_b, winner1_id, match_type, field_number)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (date_str, session_id, player_a_id, player_b_id, 1, 1, None, match_type, field_number))
+                        ''', (date_str, session_id, player_a_id, player_b_id, 0, 0, None, match_type, field_number))
                         row_position = self.matchups_table.rowCount()
                         self.matchups_table.insertRow(row_position)
                         self.matchups_table.setItem(row_position, 0, QTableWidgetItem(str(field_number)))
@@ -862,7 +863,7 @@ class ScheduleSessionDialog(QDialog):
                         cursor.execute('''
                             INSERT INTO matches (date, session_id, player_a1_id, player_a2_id, player_b1_id, player_b2_id, score_a, score_b, winner1_id, winner2_id, match_type, field_number)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (date_str, session_id, player_a1_id, player_a2_id, player_b1_id, player_b2_id, 1, 1, None, None, match_type, field_number))
+                        ''', (date_str, session_id, player_a1_id, player_a2_id, player_b1_id, player_b2_id, 0, 0, None, None, match_type, field_number))
                         row_position = self.matchups_table.rowCount()
                         self.matchups_table.insertRow(row_position)
                         self.matchups_table.setItem(row_position, 0, QTableWidgetItem(str(field_number)))
@@ -871,9 +872,31 @@ class ScheduleSessionDialog(QDialog):
                         self.matchups_table.setItem(row_position, 3, QTableWidgetItem(""))  # Score A
                         self.matchups_table.setItem(row_position, 4, QTableWidgetItem(""))  # Score B
 
-                    field_number += 1
-                    if field_number > self.num_fields:
-                        field_number = 1  # Cycle through fields if more than MAX_FIELDS matches
+                    field_number += 1  # Increment field number after each match
+
+                # Handle any remaining players for singles matches
+                remaining_players_count = len(players_for_fields) - len(matches) * (2 if match_type == 'Singles' else 4)
+
+                if remaining_players_count > 0 and match_type == 'Doubles':
+                    # Pair remaining players for singles matches
+                    for i in range(len(matches) * (4), len(players_for_fields), 2):
+                        if i + 1 < len(players_for_fields):
+                            player_a = get_player_id(players_for_fields[i])
+                            player_b = get_player_id(players_for_fields[i + 1])
+                            player_a_name = get_player_name_by_id(player_a) if player_a else "N/A"
+                            player_b_name = get_player_name_by_id(player_b) if player_b else "N/A"
+                            cursor.execute('''
+                            INSERT INTO matches (date, session_id, player_a1_id, player_b1_id, score_a, score_b, winner1_id, match_type, field_number)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ''', (date_str, session_id, player_a, player_b, 0, 0, None, 'Singles', field_number))
+                            row_position = self.matchups_table.rowCount()
+                            self.matchups_table.insertRow(row_position)
+                            self.matchups_table.setItem(row_position, 0, QTableWidgetItem(str(field_number)))
+                            self.matchups_table.setItem(row_position, 1, QTableWidgetItem(player_a_name))
+                            self.matchups_table.setItem(row_position, 2, QTableWidgetItem(player_b_name))
+                            self.matchups_table.setItem(row_position, 3, QTableWidgetItem(""))  # Score A
+                            self.matchups_table.setItem(row_position, 4, QTableWidgetItem(""))  # Score B
+                            field_number += 1  # Increment field number for remaining singles matches
 
                 # Resize columns to fit the content
                 for column in range(self.matchups_table.columnCount()):
@@ -888,6 +911,8 @@ class ScheduleSessionDialog(QDialog):
 
         except sqlite3.OperationalError as e:
             QMessageBox.critical(self, 'Database Error', f'An error occurred while accessing the database: {str(e)}')
+
+
 
 
     def submit_scores(self):
