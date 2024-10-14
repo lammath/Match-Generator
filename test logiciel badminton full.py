@@ -203,6 +203,16 @@ def get_player_id(name):
     conn.close()
     return result[0] if result else None
 
+def get_player_elo_rating(player_name):
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT elo_rating FROM players WHERE name = ?
+    ''', (player_name,))
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result else 0  # Return 0 if no ELO found
+
 def get_player_name_by_id(player_id):
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
@@ -761,48 +771,142 @@ class ScheduleSessionDialog(QDialog):
     
 
     def create_matchup(self):
-        global date_str
         date_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # Current date
-        
         match_type = self.match_type_combo.currentText()
 
         assigned_players = []
+        player_elos = {}  # Dictionary to store players and their ELO ratings
+
+        # Gather assigned players and their ELO ratings
         for index in range(self.assigned_list.count()):
             item = self.assigned_list.item(index)
-            # Extract player name before the "(ELO: XXX)" part
-            player_name = item.text().split(" (")[0]  # This removes the ELO part
+            # Extract player name before any additional info (e.g., "(ELO: XXX)")
+            player_name = item.text().split(" (")[0]  # Adjust based on your actual naming convention
+            elo = get_player_elo_rating(player_name)
             assigned_players.append(player_name)
+            player_elos[player_name] = elo
+            print(f"Assigned Player: {player_name}, ELO: {elo}")
 
-        # Determine maximum players based on match type and fields
-        if match_type == 'Singles':
-            max_players = 2 * self.num_fields  # 8 players
-            required_players = 2
-        else:
-            max_players = 4 * self.num_fields  # 16 players
-            required_players = 4
-
-        if len(assigned_players) < required_players:
-            QMessageBox.warning(self, 'Input Error', f'At least {required_players} players are required for a {match_type} session.')
+        if not assigned_players:
+            QMessageBox.warning(self, 'Input Error', 'No players assigned for matchups.')
             return
 
-        total_assigned = len(assigned_players)
+        # Sort players by ELO ratings (strongest to weakest)
+        sorted_players = sorted(assigned_players, key=lambda player: player_elos[player], reverse=True)
+        print("Sorted Players by ELO:", sorted_players)
 
-        if total_assigned > max_players:
-            # Assign only up to max_players to fields, rest to bench
-            players_for_fields = assigned_players[:max_players]
-            bench_players = assigned_players[max_players:]
-        elif total_assigned % 2 != 0:
-            players_for_fields = assigned_players[:-1]
-            bench_players = assigned_players[-1:]
-        else:
-            players_for_fields = assigned_players
-            bench_players = []
+        # Determine number of tiers (2 to 4)
+        num_tiers = random.randint(2, 4)
+        print("Number of Tiers:", num_tiers)
 
-        # Shuffle the players to randomize matchups
-        random.shuffle(players_for_fields)
+        # Calculate the size of each tier
+        players_per_tier = len(sorted_players) // num_tiers
+        remainder = len(sorted_players) % num_tiers
+        print("Players per Tier:", players_per_tier, "with Remainder:", remainder)
 
-        # Assign a default session name based on current date and time
-        session_name = f"Session on {date_str}"
+        # Create tiers
+        tiers = []
+        start_index = 0
+
+        for tier_index in range(num_tiers):
+            # Distribute the remainder among the first 'remainder' tiers
+            end_index = start_index + players_per_tier + (1 if tier_index < remainder else 0)
+            tier = sorted_players[start_index:end_index]
+            tiers.append(tier)
+            print(f"Tier {tier_index + 1}:", tier)
+            start_index = end_index
+
+        matches = []
+        matched_players = set()  # To track players already in a match
+
+        # Generate matchups for each tier
+        for tier_index, tier in enumerate(tiers):
+            num_players = len(tier)
+            print(f"Processing Tier {tier_index + 1} with {num_players} players.")
+
+            if match_type == 'Doubles':
+                # Shuffle players within the tier to randomize team assignments
+                random.shuffle(tier)
+                teams = []
+
+                # Pair players into teams of two
+                for i in range(0, num_players, 2):
+                    if i + 1 < num_players:
+                        team = (tier[i], tier[i + 1])
+                        teams.append(team)
+                        matched_players.update(team)
+                        print(f"Created Team: {team}")
+                    else:
+                        # Handle odd player by leaving them for singles
+                        leftover_player = tier[i]
+                        print(f"Leftover Player for Singles: {leftover_player}")
+
+                # Shuffle teams to randomize match pairings
+                random.shuffle(teams)
+
+                # Pair teams against each other within the same tier
+                for i in range(0, len(teams), 2):
+                    if i + 1 < len(teams):
+                        team_a = teams[i]
+                        team_b = teams[i + 1]
+                        matches.append((team_a, team_b))
+                        print(f"Created Doubles Match: {team_a} vs {team_b}")
+                    else:
+                        # Handle odd number of teams by leaving the last team for singles
+                        leftover_team = teams[i]
+                        print(f"Leftover Team for Singles: {leftover_team}")
+
+            else:  # Singles
+                # Shuffle players within the tier to randomize match pairings
+                random.shuffle(tier)
+
+                # Pair players directly
+                for i in range(0, num_players, 2):
+                    if i + 1 < num_players:
+                        player_a = tier[i]
+                        player_b = tier[i + 1]
+                        matches.append((player_a, player_b))
+                        matched_players.update([player_a, player_b])
+                        print(f"Created Singles Match: {player_a} vs {player_b}")
+                    else:
+                        # Handle odd player by leaving them on the bench
+                        leftover_player = tier[i]
+                        print(f"Leftover Player on Bench: {leftover_player}")
+
+        # For Doubles, handle leftover players as Singles matches
+        if match_type == 'Doubles':
+            leftover_players = set(assigned_players) - matched_players
+            print("Leftover Players for Singles:", leftover_players)
+            leftover_players = list(leftover_players)
+            random.shuffle(leftover_players)
+
+            for i in range(0, len(leftover_players), 2):
+                if i + 1 < len(leftover_players):
+                    player_a = leftover_players[i]
+                    player_b = leftover_players[i + 1]
+                    matches.append((player_a, player_b))
+                    print(f"Created Singles Match from Leftover: {player_a} vs {player_b}")
+                else:
+                    # Handle single leftover player by leaving them on the bench
+                    leftover_player = leftover_players[i]
+                    print(f"Single Leftover Player on Bench: {leftover_player}")
+
+        # Shuffle matches for random assignment to fields
+        random.shuffle(matches)
+        print("Shuffled Matches:", matches)
+
+        # Determine max matches based on number of fields
+        max_matches = 4 * self.num_fields if match_type == 'Doubles' else 2 * self.num_fields
+        print("Max Matches Allowed:", max_matches)
+
+        # Limit matches to max_matches
+        if len(matches) > max_matches:
+            matches = matches[:max_matches]
+            print("Limited Matches:", matches)
+
+        # Assign matches to fields
+        field_number = 1
+        self.matchups_table.setRowCount(0)  # Clear any existing rows
 
         try:
             with sqlite3.connect(DATABASE) as conn:
@@ -812,83 +916,67 @@ class ScheduleSessionDialog(QDialog):
                 cursor.execute('''
                     INSERT INTO sessions (name, match_type, date)
                     VALUES (?, ?, ?)
-                ''', (session_name, match_type, date_str))
+                ''', (f"Session on {date_str}", match_type, date_str))
                 session_id = cursor.lastrowid
+                print(f"Created Session ID: {session_id}")
 
-                # Assign players to matches within the session
-                matches = []
-                if match_type == 'Singles':
-                    for i in range(0, len(players_for_fields), 2):
-                        if i + 1 < len(players_for_fields):
-                            player_a = get_player_id(players_for_fields[i])
-                            player_b = get_player_id(players_for_fields[i + 1])
-                            matches.append((player_a, player_b))
-                else:  # Double matches
-                    for i in range(0, len(players_for_fields), 4):
-                        if i + 3 < len(players_for_fields):
-                            player_a1 = get_player_id(players_for_fields[i])
-                            player_a2 = get_player_id(players_for_fields[i + 1])
-                            player_b1 = get_player_id(players_for_fields[i + 2])
-                            player_b2 = get_player_id(players_for_fields[i + 3])
-                            matches.append((player_a1, player_a2, player_b1, player_b2))
-
-                field_number = 1
-                self.matchups_table.setRowCount(0)  # Clear any existing rows
-
-                # Handle matches
                 for match in matches:
-                    if match_type == 'Singles':
-                        player_a_id, player_b_id = match
-                        player_a_name = get_player_name_by_id(player_a_id) if player_a_id else "N/A"
-                        player_b_name = get_player_name_by_id(player_b_id) if player_b_id else "N/A"
-                        cursor.execute('''
-                            INSERT INTO matches (date, session_id, player_a1_id, player_b1_id, score_a, score_b, winner1_id, match_type, field_number)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (date_str, session_id, player_a_id, player_b_id, 0, 0, None, match_type, field_number))
-                        row_position = self.matchups_table.rowCount()
-                        self.matchups_table.insertRow(row_position)
-                        self.matchups_table.setItem(row_position, 0, QTableWidgetItem(str(field_number)))
-                        self.matchups_table.setItem(row_position, 1, QTableWidgetItem(player_a_name))
-                        self.matchups_table.setItem(row_position, 2, QTableWidgetItem(player_b_name))
-                        self.matchups_table.setItem(row_position, 3, QTableWidgetItem(""))  # Score A
-                        self.matchups_table.setItem(row_position, 4, QTableWidgetItem(""))  # Score B
-                    else:
-                        player_a1_id, player_a2_id, player_b1_id, player_b2_id = match
-                        player_a1_name = get_player_name_by_id(player_a1_id) if player_a1_id else "N/A"
-                        player_a2_name = get_player_name_by_id(player_a2_id) if player_a2_id else "N/A"
-                        player_b1_name = get_player_name_by_id(player_b1_id) if player_b1_id else "N/A"
-                        player_b2_name = get_player_name_by_id(player_b2_id) if player_b2_id else "N/A"
-                        team_a = f"({player_a1_name} & {player_a2_name})"
-                        team_b = f"({player_b1_name} & {player_b2_name})"
-                        cursor.execute('''
-                            INSERT INTO matches (date, session_id, player_a1_id, player_a2_id, player_b1_id, player_b2_id, score_a, score_b, winner1_id, winner2_id, match_type, field_number)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (date_str, session_id, player_a1_id, player_a2_id, player_b1_id, player_b2_id, 0, 0, None, None, match_type, field_number))
-                        row_position = self.matchups_table.rowCount()
-                        self.matchups_table.insertRow(row_position)
-                        self.matchups_table.setItem(row_position, 0, QTableWidgetItem(str(field_number)))
-                        self.matchups_table.setItem(row_position, 1, QTableWidgetItem(team_a))
-                        self.matchups_table.setItem(row_position, 2, QTableWidgetItem(team_b))
-                        self.matchups_table.setItem(row_position, 3, QTableWidgetItem(""))  # Score A
-                        self.matchups_table.setItem(row_position, 4, QTableWidgetItem(""))  # Score B
+                    if match_type == 'Doubles':
+                        # Determine if this match is Doubles or Singles based on match structure
+                        if len(match) == 2 and isinstance(match[0], tuple) and isinstance(match[1], tuple):
+                            # Doubles Match
+                            team_a, team_b = match
+                            player_a1, player_a2 = team_a
+                            player_b1, player_b2 = team_b
 
-                    field_number += 1  # Increment field number after each match
+                            player_a1_id = get_player_id(player_a1)
+                            player_a2_id = get_player_id(player_a2)
+                            player_b1_id = get_player_id(player_b1)
+                            player_b2_id = get_player_id(player_b2)
 
-                # Handle any remaining players for singles matches
-                remaining_players_count = len(players_for_fields) - len(matches) * (2 if match_type == 'Singles' else 4)
-
-                if remaining_players_count > 0 and match_type == 'Doubles':
-                    # Pair remaining players for singles matches
-                    for i in range(len(matches) * (4), len(players_for_fields), 2):
-                        if i + 1 < len(players_for_fields):
-                            player_a = get_player_id(players_for_fields[i])
-                            player_b = get_player_id(players_for_fields[i + 1])
-                            player_a_name = get_player_name_by_id(player_a) if player_a else "N/A"
-                            player_b_name = get_player_name_by_id(player_b) if player_b else "N/A"
                             cursor.execute('''
-                            INSERT INTO matches (date, session_id, player_a1_id, player_b1_id, score_a, score_b, winner1_id, match_type, field_number)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            ''', (date_str, session_id, player_a, player_b, 0, 0, None, 'Singles', field_number))
+                                INSERT INTO matches (
+                                    date, session_id, player_a1_id, player_a2_id,
+                                    player_b1_id, player_b2_id, score_a, score_b,
+                                    winner1_id, winner2_id, match_type, field_number
+                                )
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ''', (
+                                date_str, session_id, player_a1_id, player_a2_id,
+                                player_b1_id, player_b2_id, 0, 0,
+                                None, None, 'Doubles', field_number
+                            ))
+
+                            # Update the matchups_table UI
+                            row_position = self.matchups_table.rowCount()
+                            self.matchups_table.insertRow(row_position)
+                            self.matchups_table.setItem(row_position, 0, QTableWidgetItem(str(field_number)))
+                            self.matchups_table.setItem(row_position, 1, QTableWidgetItem(f"({player_a1} & {player_a2})"))
+                            self.matchups_table.setItem(row_position, 2, QTableWidgetItem(f"({player_b1} & {player_b2})"))
+                            self.matchups_table.setItem(row_position, 3, QTableWidgetItem(""))  # Score A
+                            self.matchups_table.setItem(row_position, 4, QTableWidgetItem(""))  # Score B
+
+                        elif len(match) == 2 and isinstance(match[0], str) and isinstance(match[1], str):
+                            # Singles Match within Doubles Session
+                            player_a, player_b = match
+
+                            player_a_id = get_player_id(player_a)
+                            player_b_id = get_player_id(player_b)
+                            player_a_name = player_a if player_a_id else "N/A"
+                            player_b_name = player_b if player_b_id else "N/A"
+
+                            cursor.execute('''
+                                INSERT INTO matches (
+                                    date, session_id, player_a1_id, player_b1_id,
+                                    score_a, score_b, winner1_id, match_type, field_number
+                                )
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ''', (
+                                date_str, session_id, player_a_id, player_b_id,
+                                0, 0, None, 'Singles', field_number
+                            ))
+
+                            # Update the matchups_table UI
                             row_position = self.matchups_table.rowCount()
                             self.matchups_table.insertRow(row_position)
                             self.matchups_table.setItem(row_position, 0, QTableWidgetItem(str(field_number)))
@@ -896,14 +984,57 @@ class ScheduleSessionDialog(QDialog):
                             self.matchups_table.setItem(row_position, 2, QTableWidgetItem(player_b_name))
                             self.matchups_table.setItem(row_position, 3, QTableWidgetItem(""))  # Score A
                             self.matchups_table.setItem(row_position, 4, QTableWidgetItem(""))  # Score B
-                            field_number += 1  # Increment field number for remaining singles matches
+
+                        else:
+                            # Invalid match structure
+                            print("Invalid match structure for Doubles:", match)
+                            continue  # Skip invalid matches
+                    else:  # Singles session
+                        if len(match) != 2 or not all(isinstance(p, str) for p in match):
+                            print("Invalid match format for Singles:", match)
+                            continue  # Skip invalid matches
+                        player_a, player_b = match
+
+                        player_a_id = get_player_id(player_a)
+                        player_b_id = get_player_id(player_b)
+                        player_a_name = player_a if player_a_id else "N/A"
+                        player_b_name = player_b if player_b_id else "N/A"
+
+                        cursor.execute('''
+                            INSERT INTO matches (
+                                date, session_id, player_a1_id, player_b1_id,
+                                score_a, score_b, winner1_id, match_type, field_number
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            date_str, session_id, player_a_id, player_b_id,
+                            0, 0, None, 'Singles', field_number
+                        ))
+
+                        # Update the matchups_table UI
+                        row_position = self.matchups_table.rowCount()
+                        self.matchups_table.insertRow(row_position)
+                        self.matchups_table.setItem(row_position, 0, QTableWidgetItem(str(field_number)))
+                        self.matchups_table.setItem(row_position, 1, QTableWidgetItem(player_a_name))
+                        self.matchups_table.setItem(row_position, 2, QTableWidgetItem(player_b_name))
+                        self.matchups_table.setItem(row_position, 3, QTableWidgetItem(""))  # Score A
+                        self.matchups_table.setItem(row_position, 4, QTableWidgetItem(""))  # Score B
+
+                    field_number += 1
+                    if field_number > self.num_fields:
+                        field_number = 1  # Cycle through fields if more than MAX_FIELDS matches
 
                 # Resize columns to fit the content
                 for column in range(self.matchups_table.columnCount()):
                     self.matchups_table.resizeColumnToContents(column)
 
-                if bench_players:
-                    QMessageBox.information(self, 'Bench Players', f"The following players are on the bench:\n{', '.join(bench_players)}")
+                # Inform the user about the matchups created
+                if match_type == 'Doubles' and len(matches) < (len(assigned_players) // 2):
+                    bench_players = set(assigned_players) - matched_players
+                    QMessageBox.information(
+                        self, 'Bench Players',
+                        f"The following players are on the bench:\n{', '.join(bench_players)}"
+                    )
                 else:
                     QMessageBox.information(self, 'Success', 'Session scheduled successfully.')
 
@@ -911,6 +1042,10 @@ class ScheduleSessionDialog(QDialog):
 
         except sqlite3.OperationalError as e:
             QMessageBox.critical(self, 'Database Error', f'An error occurred while accessing the database: {str(e)}')
+            return
+
+
+
 
 
 
