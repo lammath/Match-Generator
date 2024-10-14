@@ -295,6 +295,7 @@ class AssignedPlayersList(QListWidget):
     def __init__(self, available_list, parent=None):
         super().__init__(parent)
         self.available_list = available_list
+        self.players = []  # Initialize the list to store players with their elo_rating
         self.setAcceptDrops(True)
         self.setDragEnabled(False)
         self.setDropIndicatorShown(True)
@@ -302,20 +303,36 @@ class AssignedPlayersList(QListWidget):
         self.setSelectionMode(QAbstractItemView.ExtendedSelection)  # Allow multiple selection
 
     def dropEvent(self, event):
-        if event.source() == self.available_list:
-            selected_items = self.available_list.selectedItems()
-            for item in selected_items:
-                player_name = item.text()
-                # Prevent duplicate assignments
-                if any(self.item(i).text() == player_name for i in range(self.count())):
-                    QMessageBox.warning(self, 'Duplicate Player', f'Player "{player_name}" is already assigned.')
-                    continue
-                # Add to Assigned Players
-                self.addItem(player_name)
-                # Remove from Available Players
-                self.available_list.takeItem(self.available_list.row(item))
-        else:
-            super().dropEvent(event)
+        super().dropEvent(event)
+
+        # Collect the dropped players from the available list
+        selected_items = self.available_list.selectedItems()
+        for item in selected_items:
+            player_name = item.text()
+            # Get the elo_rating for the player from the database
+            elo_rating = self.get_player_elo_rating(player_name)
+            self.players.append((player_name, elo_rating))
+
+            # Remove the player from the available list
+            self.available_list.takeItem(self.available_list.row(item))
+
+        # Sort players by elo_rating in descending order
+        self.players.sort(key=lambda x: x[1], reverse=True)
+
+        # Clear the assigned list and re-populate it
+        self.clear()
+        for player_name, elo_rating in self.players:
+            self.addItem(f"{player_name} (ELO: {elo_rating})")
+
+    def get_player_elo_rating(self, player_name):
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT elo_rating FROM players WHERE name = ?
+        ''', (player_name,))
+        elo_rating = cursor.fetchone()[0]
+        conn.close()
+        return elo_rating
 
     def contextMenuEvent(self, event):
         item = self.itemAt(event.pos())
@@ -608,7 +625,7 @@ class ImportPlayersDialog(QDialog):
 class ScheduleSessionDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle('Schedule New Session')
+        self.setWindowTitle('Generate Matchups')
         self.setGeometry(100, 100, 900, 700)
         self.session_id = None
         self.initUI()
@@ -741,9 +758,7 @@ class ScheduleSessionDialog(QDialog):
         for (name, last_played) in players:
             item = QListWidgetItem(name)
             self.available_list.addItem(item)
-            print(f"Player: {name}, Last Participation: {last_played}")
-
-
+    
 
     def create_matchup(self):
         global date_str
@@ -754,7 +769,9 @@ class ScheduleSessionDialog(QDialog):
         assigned_players = []
         for index in range(self.assigned_list.count()):
             item = self.assigned_list.item(index)
-            assigned_players.append(item.text())
+            # Extract player name before the "(ELO: XXX)" part
+            player_name = item.text().split(" (")[0]  # This removes the ELO part
+            assigned_players.append(player_name)
 
         # Determine maximum players based on match type and fields
         if match_type == 'Singles':
@@ -771,10 +788,10 @@ class ScheduleSessionDialog(QDialog):
         total_assigned = len(assigned_players)
 
         if total_assigned > max_players:
-            #Assign only up to max_players to fields, rest to bench
+            # Assign only up to max_players to fields, rest to bench
             players_for_fields = assigned_players[:max_players]
             bench_players = assigned_players[max_players:]
-        elif total_assigned % 2 !=0:
+        elif total_assigned % 2 != 0:
             players_for_fields = assigned_players[:-1]
             bench_players = assigned_players[-1:]
         else:
@@ -854,39 +871,13 @@ class ScheduleSessionDialog(QDialog):
                         self.matchups_table.setItem(row_position, 3, QTableWidgetItem(""))  # Score A
                         self.matchups_table.setItem(row_position, 4, QTableWidgetItem(""))  # Score B
 
-                        # Check if there are remaining players and available fields
-                        remaining_players = len(players_for_fields) % required_players
-                        if remaining_players >= 2 and field_number <= self.num_fields:
-                            # Pair remaining players for singles matches
-                            for i in range(0, remaining_players, 2):
-                                if i + 1 < remaining_players:
-                                    player_a = get_player_id(players_for_fields[-(i + 1)])
-                                    player_b = get_player_id(players_for_fields[-(i + 2)])
-                                    player_a_name = get_player_name_by_id(player_a) if player_a else "N/A"
-                                    player_b_name = get_player_name_by_id(player_b) if player_b else "N/A"
-                                    field_number += 1
-                                    cursor.execute('''
-                                    INSERT INTO matches (date, session_id, player_a1_id, player_b1_id, score_a, score_b, winner1_id, match_type, field_number)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                    ''', (date_str, session_id, player_a, player_b, 1, 1, None, 'Singles', field_number))
-                                    row_position = self.matchups_table.rowCount()
-                                    self.matchups_table.insertRow(row_position)
-                                    self.matchups_table.setItem(row_position, 0, QTableWidgetItem(str(field_number)))
-                                    self.matchups_table.setItem(row_position, 1, QTableWidgetItem(player_a_name))
-                                    self.matchups_table.setItem(row_position, 2, QTableWidgetItem(player_b_name))
-                                    self.matchups_table.setItem(row_position, 3, QTableWidgetItem(""))  # Score A
-                                    self.matchups_table.setItem(row_position, 4, QTableWidgetItem(""))  # Score B
-                                    # Remove paired players from the list to avoid duplication
-                                    players_for_fields.pop(-(i + 1))
-                                    players_for_fields.pop(-(i + 1))  # Note: index shifts after the first pop
-                                    break
-                        field_number += 1
-                        if field_number > self.num_fields:
-                            field_number = 1  # Cycle through fields if more than MAX_FIELDS matches
-                    # Resize columns to fit the content
+                    field_number += 1
+                    if field_number > self.num_fields:
+                        field_number = 1  # Cycle through fields if more than MAX_FIELDS matches
+
+                # Resize columns to fit the content
                 for column in range(self.matchups_table.columnCount()):
                     self.matchups_table.resizeColumnToContents(column)
-
 
                 if bench_players:
                     QMessageBox.information(self, 'Bench Players', f"The following players are on the bench:\n{', '.join(bench_players)}")
@@ -897,6 +888,7 @@ class ScheduleSessionDialog(QDialog):
 
         except sqlite3.OperationalError as e:
             QMessageBox.critical(self, 'Database Error', f'An error occurred while accessing the database: {str(e)}')
+
 
     def submit_scores(self):
         row_count = self.matchups_table.rowCount()
