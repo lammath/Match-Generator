@@ -221,6 +221,16 @@ def get_player_name_by_id(player_id):
     conn.close()
     return result[0] if result else "N/A"
 
+def remove_matches_without_winner():
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    
+    # Delete rows where winner1_id is NULL
+    cursor.execute('DELETE FROM matches WHERE winner1_id IS NULL')
+    
+    conn.commit()
+    conn.close()
+
 def get_leaderboard():
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
@@ -774,6 +784,8 @@ class ScheduleSessionDialog(QDialog):
         global date_str
         date_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # Current date
         match_type = self.match_type_combo.currentText()
+
+        remove_matches_without_winner()
 
         assigned_players = []
         player_elos = {}  # Dictionary to store players and their ELO ratings
