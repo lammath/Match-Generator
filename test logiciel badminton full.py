@@ -1349,7 +1349,9 @@ class MainWindow(QMainWindow):
     def open_create_matchup(self):
         schedule_session_dialog = ScheduleSessionDialog(self)
         schedule_session_dialog.exec_()
-        self.close()  # Close the main window after the dialog is closed
+        
+        
+        
 
     
 
@@ -1360,5 +1362,6 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
-    sys.exit(app.exec_())
+    window.close()
+    sys.exit()
     
