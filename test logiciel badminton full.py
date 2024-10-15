@@ -10,6 +10,8 @@ from PyQt5.QtWidgets import (
     QWidget, QMenu, QTextEdit, QAction, QSpinBox, QDialogButtonBox, QAbstractItemView
 )
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import QSize
 
 
 # Constants
@@ -1282,18 +1284,51 @@ class MatchHistoryWindow(QDialog):
             self.table.setItem(row_idx, 8, QTableWidgetItem(str(FieldNumber) if FieldNumber else 'N/A'))
 
 
+
 # Main Application Window
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.initUI()
+        
 
     def initUI(self):
         self.setWindowTitle('Badminton App')
         self.setGeometry(100, 100, 800, 600)
+        # Apply custom styles to the window
+        self.setStyleSheet("""
+            QPushButton {
+        background-color: #4CAF50;
+        color: white;
+        border-radius: 5px;
+        padding: 8px 16px;
+        font-size: 14px;
+    }
+    QPushButton:hover {
+        background-color: #45a049;
+    }
+    QLabel, QLineEdit, QComboBox {
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        padding: 5px;
+    }
+    QTableWidget {
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        padding: 5px;
+    }
+    QMainWindow {
+        background-color: #F0F0F0;
+    }
+    QListWidget {
+        background-color: #fff;
+        border: 1px solid #ddd;
+    }
+        """)
 
         # Call the method to open the "generate match ups" interface
         self.open_create_matchup()
+        
 
     def open_manage_players(self):
         manage_players_dialog = ManagePlayersDialog(self)
@@ -1317,6 +1352,8 @@ class MainWindow(QMainWindow):
         self.close()  # Close the main window after the dialog is closed
 
     
+
+    
 # Main Execution
 if __name__ == "__main__":
     init_db()
@@ -1324,3 +1361,4 @@ if __name__ == "__main__":
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
+    
