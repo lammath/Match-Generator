@@ -306,7 +306,7 @@ def get_performance_data():
             ''', (name, name, name, name))
             wins = cursor.fetchone()[0]
             conn.close()
-            win_rate = f"{(wins / matches_played * 100):.2f}%"
+            win_rate = f"{(wins / matches_played * 100) / 2 :.2f}%"
         performance_data.append((name, int(elo), matches_played, win_rate))
     return performance_data
 
@@ -648,10 +648,28 @@ class ScheduleSessionDialog(QDialog):
         self.setWindowTitle('Generate Matchups')
         self.setGeometry(100, 100, 900, 700)
         self.session_id = None
-        self.initUI()
+        self.initUI(parent)
 
-    def initUI(self):
+    def initUI(self, parent):
         layout = QVBoxLayout()
+
+        # Add buttons at the top
+        button_layout = QHBoxLayout()
+        
+        self.manage_players_button = QPushButton("Manage Players")
+        self.view_leaderboard_button = QPushButton("View Leaderboard")
+        self.view_match_history_button = QPushButton("View Match History")
+        
+        # Connect buttons to methods in the parent (MainWindow)
+        self.manage_players_button.clicked.connect(parent.open_manage_players)
+        self.view_leaderboard_button.clicked.connect(parent.open_leaderboard)
+        self.view_match_history_button.clicked.connect(parent.open_match_history)
+        
+        button_layout.addWidget(self.manage_players_button)
+        button_layout.addWidget(self.view_leaderboard_button)
+        button_layout.addWidget(self.view_match_history_button)
+        
+        layout.addLayout(button_layout)
 
         form_layout = QFormLayout()
 
@@ -1268,60 +1286,37 @@ class MatchHistoryWindow(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Badminton Match-Up App')
-        self.setGeometry(100, 100, 400, 600)
         self.initUI()
-    
+
     def initUI(self):
-        central_widget = QWidget()
-        layout = QVBoxLayout()
+        self.setWindowTitle('Badminton App')
+        self.setGeometry(100, 100, 800, 600)
 
-        # Manage Players Button
-        self.manage_players_button = QPushButton('Manage Players')
-        self.manage_players_button.clicked.connect(self.open_manage_players)
-        layout.addWidget(self.manage_players_button)
+        # Call the method to open the "generate match ups" interface
+        self.open_create_matchup()
 
-        # View Leaderboard Button
-        self.leaderboard_button = QPushButton('View Leaderboard')
-        self.leaderboard_button.clicked.connect(self.open_leaderboard)
-        layout.addWidget(self.leaderboard_button)
-
-        # View Match History Button
-        self.match_history_button = QPushButton('View Match History')
-        self.match_history_button.clicked.connect(self.open_match_history)
-        layout.addWidget(self.match_history_button)
-
-        # Schedule New Session Button
-        self.create_matchup_button = QPushButton('Generate Matchups')
-        self.create_matchup_button.clicked.connect(self.open_create_matchup)
-        layout.addWidget(self.create_matchup_button)
-
-        # Add Stretch to push buttons to the top
-        layout.addStretch()
-
-        central_widget.setLayout(layout)
-        self.setCentralWidget(central_widget)
-    
     def open_manage_players(self):
-        dialog = ManagePlayersDialog(self)
-        dialog.exec_()
-    
-    def open_import_players(self):
-        dialog = ImportPlayersDialog(self)
-        dialog.exec_()
-    
-    def open_leaderboard(self):
-        window = LeaderboardWindow(self)
-        window.exec_()
-    
-    def open_match_history(self):
-        window = MatchHistoryWindow(self)
-        window.exec_()
-    
-    def open_create_matchup(self):
-        dialog = ScheduleSessionDialog(self)
-        dialog.exec_()
+        manage_players_dialog = ManagePlayersDialog(self)
+        manage_players_dialog.exec_()
 
+    def open_import_players(self):
+        import_players_dialog = ImportPlayersDialog(self)
+        import_players_dialog.exec_()
+
+    def open_leaderboard(self):
+        leaderboard_window = LeaderboardWindow(self)
+        leaderboard_window.exec_()
+
+    def open_match_history(self):
+        match_history_window = MatchHistoryWindow(self)
+        match_history_window.exec_()
+
+    def open_create_matchup(self):
+        schedule_session_dialog = ScheduleSessionDialog(self)
+        schedule_session_dialog.exec_()
+        self.close()  # Close the main window after the dialog is closed
+
+    
 # Main Execution
 if __name__ == "__main__":
     init_db()
@@ -1329,27 +1324,3 @@ if __name__ == "__main__":
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
-
-
-
-import sqlite3
-DATABASE = 'badminton_app.db'
-def print_match_table():
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-    
-    cursor.execute('SELECT * FROM matches')
-    matches = cursor.fetchall()
-    
-    # Print column headers
-    headers = [description[0] for description in cursor.description]
-    print("\t".join(headers))
-    
-    # Print each row
-    for match in matches:
-        print("\t".join(map(str, match)))
-    
-    conn.close()
-
-# Call the function to print the match table
-print_match_table()
