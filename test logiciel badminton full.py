@@ -189,14 +189,6 @@ def update_elo(player_a1_id, player_a2_id, player_b1_id, player_b2_id, winner1_i
     conn.close()
 
 # Utility Functions
-def get_player_names():
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-    cursor.execute('SELECT name FROM players')
-    names = [row[0] for row in cursor.fetchall()]
-    conn.close()
-    return names
-
 def get_player_id(name):
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
@@ -213,15 +205,7 @@ def get_player_elo_rating(player_name):
     ''', (player_name,))
     result = cursor.fetchone()
     conn.close()
-    return result[0] if result else 0  # Return 0 if no ELO found
-
-def get_player_name_by_id(player_id):
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-    cursor.execute('SELECT name FROM players WHERE id = ?', (player_id,))
-    result = cursor.fetchone()
-    conn.close()
-    return result[0] if result else "N/A"
+    return result[0] if result else 0  # Return 0 if no ELO found 
 
 def remove_matches_without_winner():
     conn = sqlite3.connect(DATABASE)
@@ -346,60 +330,7 @@ class AssignedPlayersList(QListWidget):
         conn.close()
         return elo_rating
 
-    def contextMenuEvent(self, event):
-        item = self.itemAt(event.pos())
-        if item:
-            menu = QMenu(self)
-            remove_action = menu.addAction("Remove Player")
-            action = menu.exec_(self.mapToGlobal(event.pos()))
-            if action == remove_action:
-                player_name = item.text()
-                # Remove from Assigned Players
-                self.takeItem(self.row(item))
-                # Add back to Available Players
-                self.available_list.addItem(player_name)
 
-# GUI Components
-# Assuming you have a method to show the add player dialog
-def show_add_player_dialog(self):
-    dialog = QDialog(self)
-    dialog.setWindowTitle("Add Player")
-    
-    form_layout = QFormLayout()
-    
-    name_input = QLineEdit()
-    elo_input = QLineEdit()
-    elo_input.setValidator(QDoubleValidator(0, 3000, 2))  # ELO rating between 0 and 3000 with 2 decimal places
-    
-    form_layout.addRow("Name:", name_input)
-    form_layout.addRow("ELO Rating:", elo_input)
-    
-    buttons = QHBoxLayout()
-    add_button = QPushButton("Add")
-    cancel_button = QPushButton("Cancel")
-    buttons.addWidget(add_button)
-    buttons.addWidget(cancel_button)
-    
-    layout = QVBoxLayout()
-    layout.addLayout(form_layout)
-    layout.addLayout(buttons)
-    
-    dialog.setLayout(layout)
-    
-    def add_player():
-        name = name_input.text()
-        elo_rating = float(elo_input.text())
-        
-        if name and elo_rating:
-            self.add_player_to_db(name, elo_rating)
-            dialog.accept()
-        else:
-            QMessageBox.warning(self, "Input Error", "Please provide both name and ELO rating.")
-    
-    add_button.clicked.connect(add_player)
-    cancel_button.clicked.connect(dialog.reject)
-    
-    dialog.exec_()
 
 # Assuming you have a method to add a player to the database
 def add_player_to_db(self, name, elo_rating):
@@ -1297,10 +1228,6 @@ class MainWindow(QMainWindow):
         manage_players_dialog = ManagePlayersDialog(self)
         manage_players_dialog.exec_()
 
-    def open_import_players(self):
-        import_players_dialog = ImportPlayersDialog(self)
-        import_players_dialog.exec_()
-
     def open_leaderboard(self):
         leaderboard_window = LeaderboardWindow(self)
         leaderboard_window.exec_()
@@ -1312,8 +1239,7 @@ class MainWindow(QMainWindow):
     def open_create_matchup(self):
         schedule_session_dialog = ScheduleSessionDialog(self)
         schedule_session_dialog.exec_()
-
-    
+  
 # Main Execution
 if __name__ == "__main__":
     init_db()
