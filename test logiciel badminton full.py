@@ -233,17 +233,6 @@ def remove_matches_without_winner():
     conn.commit()
     conn.close()
 
-def get_leaderboard():
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT name, elo_rating FROM players
-        ORDER BY elo_rating DESC
-    ''')
-    leaderboard = cursor.fetchall()
-    conn.close()
-    return leaderboard
-
 def get_match_history():
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
@@ -287,6 +276,7 @@ def get_performance_data():
     cursor = conn.cursor()
     cursor.execute('''
         SELECT name, elo_rating, matches_played FROM players
+            order by elo_rating desc
     ''')
     players = cursor.fetchall()
     conn.close()
@@ -1219,33 +1209,6 @@ class LeaderboardWindow(QDialog):
                     writer.writerow(row_data)
             QMessageBox.information(self, 'Success', 'Leaderboard exported successfully.')
 
-class PerformanceTrackingWindow(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Performance Tracking')
-        self.setGeometry(150, 150, 600, 500)
-        self.initUI()
-    
-    def initUI(self):
-        layout = QVBoxLayout()
-
-        self.table = QTableWidget()
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(['Name', 'Elo Rating', 'Matches Played', 'Win Rate'])
-        self.load_performance_data()
-        layout.addWidget(self.table)
-
-        self.setLayout(layout)
-    
-    def load_performance_data(self):
-        performance_data = get_performance_data()
-        self.table.setRowCount(len(performance_data))
-        for row_idx, (name, elo, MatchesPlayed, WinRate) in enumerate(performance_data):
-            self.table.setItem(row_idx, 0, QTableWidgetItem(name))
-            self.table.setItem(row_idx, 1, QTableWidgetItem(str(elo)))
-            self.table.setItem(row_idx, 2, QTableWidgetItem(str(MatchesPlayed)))
-            self.table.setItem(row_idx, 3, QTableWidgetItem(WinRate))
-
 
 class MatchHistoryWindow(QDialog):
     def __init__(self, parent=None):
@@ -1349,11 +1312,6 @@ class MainWindow(QMainWindow):
     def open_create_matchup(self):
         schedule_session_dialog = ScheduleSessionDialog(self)
         schedule_session_dialog.exec_()
-        
-        
-        
-
-    
 
     
 # Main Execution
