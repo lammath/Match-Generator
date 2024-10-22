@@ -572,6 +572,7 @@ class ScheduleSessionDialog(QDialog):
         self.setGeometry(100, 100, 900, 700)
         self.session_id = None
         self.initUI(parent)
+        
 
     def initUI(self, parent):
         layout = QVBoxLayout()
@@ -582,20 +583,23 @@ class ScheduleSessionDialog(QDialog):
         self.manage_players_button = QPushButton("Manage Players")
         self.view_leaderboard_button = QPushButton("View Leaderboard")
         self.view_match_history_button = QPushButton("View Match History")
+        self.tutorial_button = QPushButton('Show Tutorial')
         
         # Connect buttons to methods in the parent (MainWindow)
         self.manage_players_button.clicked.connect(parent.open_manage_players)
         self.view_leaderboard_button.clicked.connect(parent.open_leaderboard)
         self.view_match_history_button.clicked.connect(parent.open_match_history)
+        self.tutorial_button.clicked.connect(parent.open_tutorial)
         
         button_layout.addWidget(self.manage_players_button)
         button_layout.addWidget(self.view_leaderboard_button)
         button_layout.addWidget(self.view_match_history_button)
+        button_layout.addWidget(self.tutorial_button)
         
         layout.addLayout(button_layout)
 
         form_layout = QFormLayout()
-
+        
         self.match_type_combo = QComboBox()
         self.match_type_combo.addItems(['Doubles', 'Singles'])
         form_layout.addRow('Match Type:', self.match_type_combo)
@@ -965,13 +969,6 @@ class ScheduleSessionDialog(QDialog):
 
 
 
-
-
-
-
-
-
-
     def submit_scores(self):
         row_count = self.matchups_table.rowCount()
         if row_count == 0:
@@ -1178,6 +1175,59 @@ class MatchHistoryWindow(QDialog):
             self.table.setItem(row_idx, 8, QTableWidgetItem(str(FieldNumber) if FieldNumber else 'N/A'))
 
 
+class TutorialWindow(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("App Tutorial")
+        self.setGeometry(100, 100, 600, 400)
+        self.initUI()
+
+    def initUI(self):
+        layout = QVBoxLayout()
+
+        # Add buttons for each tutorial step
+        self.step1_button = QPushButton("Step 1: Initialize Database")
+        self.step1_button.clicked.connect(self.show_step1)
+        layout.addWidget(self.step1_button)
+
+        self.step2_button = QPushButton("Step 2: Manage Players")
+        self.step2_button.clicked.connect(self.show_step2)
+        layout.addWidget(self.step2_button)
+
+        self.step3_button = QPushButton("Step 3: Schedule Matches")
+        self.step3_button.clicked.connect(self.show_step3)
+        layout.addWidget(self.step3_button)
+
+        self.step4_button = QPushButton("Step 4: Submit Scores")
+        self.step4_button.clicked.connect(self.show_step4)
+        layout.addWidget(self.step4_button)
+
+        self.step5_button = QPushButton("Step 5: View Leaderboard")
+        self.step5_button.clicked.connect(self.show_step5)
+        layout.addWidget(self.step5_button)
+
+        self.setLayout(layout)
+
+    def show_step1(self):
+        QMessageBox.information(self, "Step 1: Initialize Database",
+                                "To initialize the database, run the `init_db` function. This will create the necessary tables for players, sessions, and matches.")
+
+    def show_step2(self):
+        QMessageBox.information(self, "Step 2: Manage Players",
+                                "Use the 'Manage Players' dialog to add, remove, import, and export player data. You can access this dialog from the main menu.")
+
+    def show_step3(self):
+        QMessageBox.information(self, "Step 3: Schedule Matches",
+                                "In the 'Schedule Matches' dialog, you can create matchups by assigning players to matches. You can also specify the match type (singles or doubles) and the number of fields.")
+
+    def show_step4(self):
+        QMessageBox.information(self, "Step 4: Submit Scores",
+                                "After matches are played, use the 'Submit Scores' button to enter the results. This will update the players' Elo ratings based on the match outcomes.")
+
+    def show_step5(self):
+        QMessageBox.information(self, "Step 5: View Leaderboard",
+                                "The 'Leaderboard' window shows the current rankings of all players based on their Elo ratings. You can also export the leaderboard to a CSV file.")
+
 
 # Main Application Window
 class MainWindow(QMainWindow):
@@ -1239,6 +1289,10 @@ class MainWindow(QMainWindow):
     def open_create_matchup(self):
         schedule_session_dialog = ScheduleSessionDialog(self)
         schedule_session_dialog.exec_()
+    
+    def open_tutorial(self):
+        self.tutorial_window = TutorialWindow()
+        self.tutorial_window.exec_()
   
 # Main Execution
 if __name__ == "__main__":
