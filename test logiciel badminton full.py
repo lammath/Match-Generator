@@ -1273,26 +1273,36 @@ class TutorialWindow(QDialog):
         
         # Define the tutorial steps with corresponding tips
         steps = [
-            ("Manage Players", "In the Manage Players menu, add players name and an estimation of their ELO Rating compared to the other players in your league", "tutorial/add_players.gif", 
-             "Tip: You can remove multiple players with ctrl + click"),
+            ("Manage Players", 
+            "In the Manage Players menu, add players name and an estimation of their ELO Rating compared to the other players in your league", 
+            "tutorial/add_players.gif", 
+            "Tip: You can remove multiple players with ctrl + click",
+            720, 480),
 
-            ("Schedule Matches", """1. Create matchups by drag and dropping available players into the assigned players section.\r
+            ("Schedule Matches", 
+            """1. Create matchups by drag and dropping available players into the assigned players section.\r
                                         2. Specify Singles or Doubles and the number of fields.\r
-                                        3. Click 'Create Matchup' to generate games.""", "schedule_matches.gif", 
-                                """Tip: Remove players from the available section by right-clicking them.\r
-                                        Add or Remove multiple players with ctrl + click or ctrl + A \r
-                                        Matches are made by grouping people based on their ELO Rating and then pairing them up.
-                                        Elo Rating adapts overtime based on the results of the matches"""),
+                                        3. Click 'Create Matchup' to generate games.""", 
+            "tutorial/schedule_matches.gif", 
+            """Tip: Remove players from the available section by right-clicking them.\r
+                    Add or Remove multiple players with ctrl + click or ctrl + A \r
+                    Matches are made by grouping people based on their ELO Rating and then pairing them up.
+                    Elo Rating adapts overtime based on the results of the matches""",
+            720, 480),
 
-            ("Submit Scores", "Enter match results and click on the 'Submit Scores' button", "submit_scores.gif", 
-             "Tip: Ensure you have the correct players' scores before submitting."),
+            ("Submit Scores", "Enter match results and click on the 'Submit Scores' button", 
+            "submit_scores.gif", 
+             "Tip: Ensure you have the correct players' scores before submitting.",
+             720, 480),
 
-            ("View Leaderboard", "Check current rankings and export them to CSV.", "leaderboard.gif", 
-             "Tip: You can export the leaderboard to track player performance over time.")
+            ("View Leaderboard", "Check current rankings and export them to CSV.", 
+            "leaderboard.gif", 
+             "Tip: You can export the leaderboard to track player performance over time.",
+             720, 480)
         ]
         
         # Add each step to the scrollable layout
-        for title, description, gif_name, tip_text in steps:
+        for title, description, gif_name, tip_text, gif_width, gif_length in steps:
             step_layout = QVBoxLayout()
 
             # Title
@@ -1310,7 +1320,7 @@ class TutorialWindow(QDialog):
             # GIF
             gif_label = QLabel()
             gif_label.setScaledContents(True)  # Enable scaling of the contents
-            gif_label.setFixedSize(700, 500)  # Set a fixed size for the label
+            gif_label.setFixedSize(gif_width, gif_length)  # Set a fixed size for the label
             gif_label.setAlignment(Qt.AlignCenter)
             movie = QMovie(gif_name)
             gif_label.setMovie(movie)
