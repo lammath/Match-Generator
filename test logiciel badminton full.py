@@ -293,34 +293,72 @@ class AssignedPlayersList(QListWidget):
         self.available_list = available_list
         self.players = []  # Initialize the list to store players with their elo_rating
         self.setAcceptDrops(True)
-        self.setDragEnabled(False)
+        self.setDragEnabled(True)  # Enable dragging from this list
         self.setDropIndicatorShown(True)
-        self.setDragDropMode(QAbstractItemView.DropOnly)
+        self.setDragDropMode(QAbstractItemView.InternalMove)  # Allow internal moves and dragging
         self.setSelectionMode(QAbstractItemView.ExtendedSelection)  # Allow multiple selection
+        self.setContextMenuPolicy(Qt.CustomContextMenu)  # Enable right-click context menu
+        self.customContextMenuRequested.connect(self.show_context_menu)
+
+    def show_context_menu(self, position):
+        """Create and display the right-click context menu."""
+        menu = QMenu()
+        remove_action = menu.addAction("Remove Selected")
+        action = menu.exec_(self.mapToGlobal(position))
+        if action == remove_action:
+            self.remove_selected_players()
+
+    def remove_selected_players(self):
+        """Remove selected players from the assigned list and move them back to the available list."""
+        selected_items = self.selectedItems()
+        for item in selected_items:
+            player_name = item.text().split(" (")[0]  # Extract the player name
+            
+            # Remove the player from the assigned list
+            self.takeItem(self.row(item))
+            
+            # Add the player back to the available list
+            available_item = QListWidgetItem(player_name)
+            self.available_list.addItem(available_item)
 
     def dropEvent(self, event):
-        super().dropEvent(event)
+        """Handle the drop event to move players between lists."""
+        if event.source() == self:
+            # Handle dragging back to available players section
+            selected_items = self.selectedItems()
+            for item in selected_items:
+                player_name = item.text().split(" (")[0]  # Extract the player name
+                self.takeItem(self.row(item))  # Remove from assigned list
 
-        # Collect the dropped players from the available list
-        selected_items = self.available_list.selectedItems()
-        for item in selected_items:
-            player_name = item.text()
-            # Get the elo_rating for the player from the database
-            elo_rating = self.get_player_elo_rating(player_name)
-            self.players.append((player_name, elo_rating))
+                # Move the player back to the available list
+                available_item = QListWidgetItem(player_name)
+                self.available_list.addItem(available_item)
+        else:
+            # Handle drag and drop from available list
+            super().dropEvent(event)
+            selected_items = self.available_list.selectedItems()
+            for item in selected_items:
+                player_name = item.text()
 
-            # Remove the player from the available list
-            self.available_list.takeItem(self.available_list.row(item))
+                # Get the elo_rating for the player from the database
+                elo_rating = self.get_player_elo_rating(player_name)
+                self.players.append((player_name, elo_rating))
 
-        # Sort players by elo_rating in descending order
-        self.players.sort(key=lambda x: x[1], reverse=True)
+                # Remove the player from the available list
+                self.available_list.takeItem(self.available_list.row(item))
 
-        # Clear the assigned list and re-populate it
-        self.clear()
-        for player_name, elo_rating in self.players:
-            self.addItem(f"{player_name} ({int(elo_rating)})")
+            # Sort players by elo_rating in descending order
+            self.players.sort(key=lambda x: x[1], reverse=True)
+
+            # Clear the assigned list and re-populate it
+            self.clear()
+            for player_name, elo_rating in self.players:
+                self.addItem(f"{player_name} ({int(elo_rating)})")
+        
+        
 
     def get_player_elo_rating(self, player_name):
+        """Fetch the ELO rating of a player from the database."""
         conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
         cursor.execute('''
@@ -329,6 +367,16 @@ class AssignedPlayersList(QListWidget):
         elo_rating = cursor.fetchone()[0]
         conn.close()
         return elo_rating
+
+    def dragEnterEvent(self, event):
+        """Allow dragging players back from the assigned list."""
+        if event.source() == self or event.source() == self.available_list:
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        """Allow drag movements for the players."""
+        event.acceptProposedAction()
+
 
 
 
