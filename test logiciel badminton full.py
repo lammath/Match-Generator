@@ -7,11 +7,14 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QLabel, QLineEdit,
     QVBoxLayout, QHBoxLayout, QMessageBox, QTableWidget, QTableWidgetItem,
     QComboBox, QFileDialog, QDialog, QListWidget, QListWidgetItem, QFormLayout,
-    QWidget, QMenu, QTextEdit, QAction, QSpinBox, QDialogButtonBox, QAbstractItemView
-)
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import QSize
+    QMenu, QSpinBox, QDialogButtonBox, QAbstractItemView, 
+    QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QDialog,
+    QScrollArea, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, 
+    QDialog, QToolTip, QFrame, QSpacerItem, QSizePolicy)
+
+from PyQt5.QtCore import Qt, QSize, QTimer
+from PyQt5.QtGui import QIcon, QPixmap, QMovie, QFont
+
 
 
 # Constants
@@ -1249,58 +1252,106 @@ class MatchHistoryWindow(QDialog):
             self.table.setItem(row_idx, 8, QTableWidgetItem(str(FieldNumber) if FieldNumber else 'N/A'))
 
 
+
 class TutorialWindow(QDialog):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent=None):
+        super().__init__(parent)
         self.setWindowTitle("App Tutorial")
-        self.setGeometry(100, 100, 600, 400)
+        self.setGeometry(100, 100, 800, 600)
         self.initUI()
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-size: 16px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QLabel {
+                font-family: Arial, sans-serif;
+                font-size: 14px;
+                padding: 10px;
+                text-align: center;
+            }
+            QDialog {
+                background-color: #F9F9F9;
+            }
+            QScrollArea {
+                border: none;
+            }
+        """)
 
     def initUI(self):
-        layout = QVBoxLayout()
+        # Create main layout
+        main_layout = QVBoxLayout()
+        
+        # Create scroll area for the tutorial steps
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_content = QFrame()
+        scroll_layout = QVBoxLayout(scroll_content)
+        
+        # Define the tutorial steps
+        steps = [
+            ("Initialize Database", "Run the `init_db` function to create necessary tables.", "init_db.gif"),
+            ("Manage Players", "Add, remove, import, and export player data using the 'Manage Players' feature.", "tutorial/add_players.gif"),
+            ("Schedule Matches", "Create matchups by assigning players. Specify match type and field count.", "schedule_matches.gif"),
+            ("Submit Scores", "Enter match results to update players' Elo ratings.", "submit_scores.gif"),
+            ("View Leaderboard", "Check current rankings and export them to CSV.", "leaderboard.gif")
+        ]
+        
+        # Add each step to the scrollable layout
+        for title, description, gif_name in steps:
+            step_layout = QVBoxLayout()
 
-        # Add buttons for each tutorial step
-        self.step1_button = QPushButton("Step 1: Initialize Database")
-        self.step1_button.clicked.connect(self.show_step1)
-        layout.addWidget(self.step1_button)
+            #Title
+            title_label = QLabel(title)
+            title_label.setAlignment(Qt.AlignCenter)
+            title_label.setStyleSheet("font-weight: bold; font-size: 18px;")
+            step_layout.addWidget(title_label)
+            
+            # Description
+            description_label = QLabel(description)
+            description_label.setWordWrap(True)
+            description_label.setAlignment(Qt.AlignCenter)
+            step_layout.addWidget(description_label)
+            
+            # GIF
+            gif_label = QLabel()
+            gif_label.setScaledContents(True)  # Enable scaling of the contents
+            gif_label.setFixedSize(700, 500)  # Set a fixed size for the label
+            gif_label.setAlignment(Qt.AlignCenter)
+            movie = QMovie(gif_name)
+            gif_label.setMovie(movie)
+            movie.start()
+            step_layout.addWidget(gif_label)
+            
+            # Add some space below each step
+            step_layout.addSpacerItem(QSpacerItem(20, 20, QSizePolicy.Minimum, QSizePolicy.Fixed))
+            
+            # Add step layout to scroll layout
+            scroll_layout.addLayout(step_layout)
+        
+        # Add a "Finish" button at the bottom
+        finish_button = QPushButton("Finish")
+        finish_button.clicked.connect(self.finish_tutorial)
+        finish_button.setFixedSize(150, 40)
+        
+        # Add scroll content to scroll area
+        scroll_area.setWidget(scroll_content)
+        
+        # Add everything to the main layout
+        main_layout.addWidget(scroll_area)
+        main_layout.addWidget(finish_button, alignment=Qt.AlignCenter)
+        
+        self.setLayout(main_layout)
 
-        self.step2_button = QPushButton("Step 2: Manage Players")
-        self.step2_button.clicked.connect(self.show_step2)
-        layout.addWidget(self.step2_button)
+    def finish_tutorial(self):
+        self.close()
 
-        self.step3_button = QPushButton("Step 3: Schedule Matches")
-        self.step3_button.clicked.connect(self.show_step3)
-        layout.addWidget(self.step3_button)
-
-        self.step4_button = QPushButton("Step 4: Submit Scores")
-        self.step4_button.clicked.connect(self.show_step4)
-        layout.addWidget(self.step4_button)
-
-        self.step5_button = QPushButton("Step 5: View Leaderboard")
-        self.step5_button.clicked.connect(self.show_step5)
-        layout.addWidget(self.step5_button)
-
-        self.setLayout(layout)
-
-    def show_step1(self):
-        QMessageBox.information(self, "Step 1: Initialize Database",
-                                "To initialize the database, run the `init_db` function. This will create the necessary tables for players, sessions, and matches.")
-
-    def show_step2(self):
-        QMessageBox.information(self, "Step 2: Manage Players",
-                                "Use the 'Manage Players' dialog to add, remove, import, and export player data. You can access this dialog from the main menu.")
-
-    def show_step3(self):
-        QMessageBox.information(self, "Step 3: Schedule Matches",
-                                "In the 'Schedule Matches' dialog, you can create matchups by assigning players to matches. You can also specify the match type (singles or doubles) and the number of fields.")
-
-    def show_step4(self):
-        QMessageBox.information(self, "Step 4: Submit Scores",
-                                "After matches are played, use the 'Submit Scores' button to enter the results. This will update the players' Elo ratings based on the match outcomes.")
-
-    def show_step5(self):
-        QMessageBox.information(self, "Step 5: View Leaderboard",
-                                "The 'Leaderboard' window shows the current rankings of all players based on their Elo ratings. You can also export the leaderboard to a CSV file.")
 
 
 # Main Application Window
