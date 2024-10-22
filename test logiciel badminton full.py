@@ -1259,30 +1259,7 @@ class TutorialWindow(QDialog):
         self.setWindowTitle("App Tutorial")
         self.setGeometry(100, 100, 800, 600)
         self.initUI()
-        self.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                border-radius: 8px;
-                padding: 8px 16px;
-                font-size: 16px;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-            QLabel {
-                font-family: Arial, sans-serif;
-                font-size: 14px;
-                padding: 10px;
-                text-align: center;
-            }
-            QDialog {
-                background-color: #F9F9F9;
-            }
-            QScrollArea {
-                border: none;
-            }
-        """)
+        self.setStyleSheet("""...""")  # Your existing stylesheet here
 
     def initUI(self):
         # Create main layout
@@ -1294,20 +1271,31 @@ class TutorialWindow(QDialog):
         scroll_content = QFrame()
         scroll_layout = QVBoxLayout(scroll_content)
         
-        # Define the tutorial steps
+        # Define the tutorial steps with corresponding tips
         steps = [
-            ("Initialize Database", "Run the `init_db` function to create necessary tables.", "init_db.gif"),
-            ("Manage Players", "Add, remove, import, and export player data using the 'Manage Players' feature.", "tutorial/add_players.gif"),
-            ("Schedule Matches", "Create matchups by assigning players. Specify match type and field count.", "schedule_matches.gif"),
-            ("Submit Scores", "Enter match results to update players' Elo ratings.", "submit_scores.gif"),
-            ("View Leaderboard", "Check current rankings and export them to CSV.", "leaderboard.gif")
+            ("Manage Players", "In the Manage Players menu, add players name and an estimation of their ELO Rating compared to the other players in your league", "tutorial/add_players.gif", 
+             "Tip: You can remove multiple players with ctrl + click"),
+
+            ("Schedule Matches", """1. Create matchups by drag and dropping available players into the assigned players section.\r
+                                        2. Specify Singles or Doubles and the number of fields.\r
+                                        3. Click 'Create Matchup' to generate games.""", "schedule_matches.gif", 
+                                """Tip: Remove players from the available section by right-clicking them.\r
+                                        Add or Remove multiple players with ctrl + click or ctrl + A \r
+                                        Matches are made by grouping people based on their ELO Rating and then pairing them up.
+                                        Elo Rating adapts overtime based on the results of the matches"""),
+
+            ("Submit Scores", "Enter match results and click on the 'Submit Scores' button", "submit_scores.gif", 
+             "Tip: Ensure you have the correct players' scores before submitting."),
+
+            ("View Leaderboard", "Check current rankings and export them to CSV.", "leaderboard.gif", 
+             "Tip: You can export the leaderboard to track player performance over time.")
         ]
         
         # Add each step to the scrollable layout
-        for title, description, gif_name in steps:
+        for title, description, gif_name, tip_text in steps:
             step_layout = QVBoxLayout()
 
-            #Title
+            # Title
             title_label = QLabel(title)
             title_label.setAlignment(Qt.AlignCenter)
             title_label.setStyleSheet("font-weight: bold; font-size: 18px;")
@@ -1328,7 +1316,14 @@ class TutorialWindow(QDialog):
             gif_label.setMovie(movie)
             movie.start()
             step_layout.addWidget(gif_label)
-            
+
+            # Tip Section for each GIF
+            tip_label = QLabel(tip_text)
+            tip_label.setWordWrap(True)
+            tip_label.setAlignment(Qt.AlignCenter)
+            tip_label.setStyleSheet("font-size: 12px; color: #666666;")  # Smaller font for the tip
+            step_layout.addWidget(tip_label)
+
             # Add some space below each step
             step_layout.addSpacerItem(QSpacerItem(20, 20, QSizePolicy.Minimum, QSizePolicy.Fixed))
             
@@ -1351,6 +1346,7 @@ class TutorialWindow(QDialog):
 
     def finish_tutorial(self):
         self.close()
+
 
 
 
