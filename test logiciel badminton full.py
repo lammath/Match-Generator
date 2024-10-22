@@ -519,6 +519,7 @@ class ManagePlayersDialog(QDialog):
             name, elo_rating = dialog.get_player_data()
             self.add_player_to_db(name, elo_rating)
             self.load_players()  # Reload players after adding
+            self.refresh_available_players()
 
     def remove_players(self):
         selected_rows = set()
@@ -550,6 +551,10 @@ class ManagePlayersDialog(QDialog):
             cursor.execute('SELECT id, name, elo_rating FROM players')
             players = cursor.fetchall()
             conn.close()
+            
+            # Reference the MainWindow's `schedule_session_dialog`
+            if self.parent().schedule_session_dialog:
+                self.parent().schedule_session_dialog.populate_available_players()
 
 class AddPlayerDialog(QDialog):
     def __init__(self, parent=None):
@@ -782,12 +787,16 @@ class ScheduleSessionDialog(QDialog):
         players = cursor.fetchall()
         conn.close()
 
+        # Get names of currently assigned players
+        assigned_player_names = [self.assigned_list.item(i).text().split(" (")[0] for i in range(self.assigned_list.count())]
+
         self.available_list.clear()
 
-        # Add players to the available list, most recent first
-        for (name, last_played) in players:
-            item = QListWidgetItem(name)
-            self.available_list.addItem(item)
+        # Add players to the available list, but skip those who are already assigned
+        for name, last_played in players:
+            if name not in assigned_player_names:
+                item = QListWidgetItem(name)
+                self.available_list.addItem(item)
     
 
     def create_matchup(self):
@@ -1298,6 +1307,7 @@ class TutorialWindow(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.schedule_session_dialog = None
         self.initUI()
         
 
@@ -1352,8 +1362,9 @@ class MainWindow(QMainWindow):
         match_history_window.exec_()
 
     def open_create_matchup(self):
-        schedule_session_dialog = ScheduleSessionDialog(self)
-        schedule_session_dialog.exec_()
+        if not self.schedule_session_dialog:
+            self.schedule_session_dialog = ScheduleSessionDialog(self)  # Create and store the instance
+        self.schedule_session_dialog.exec_()
     
     def open_tutorial(self):
         self.tutorial_window = TutorialWindow()
