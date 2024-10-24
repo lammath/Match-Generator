@@ -645,6 +645,7 @@ class ScheduleSessionDialog(QDialog):
         self.setGeometry(100, 100, 900, 700)
         self.session_id = None
         self.initUI(parent)
+        self.setWindowIcon(QIcon("badminton_icon.png"))
         
 
     def initUI(self, parent):
@@ -1259,7 +1260,35 @@ class TutorialWindow(QDialog):
         self.setWindowTitle("App Tutorial")
         self.setGeometry(100, 100, 800, 600)
         self.initUI()
-        self.setStyleSheet("""...""")  # Your existing stylesheet here
+        self.setStyleSheet("""
+            QPushButton {
+        background-color: #4CAF50;
+        color: white;
+        border-radius: 5px;
+        padding: 8px 16px;
+        font-size: 14px;
+    }
+    QPushButton:hover {
+        background-color: #45a049;
+    }
+    QLabel, QLineEdit, QComboBox {
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        padding: 5px;
+    }
+    QTableWidget {
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        padding: 5px;
+    }
+    QMainWindow {
+        background-color: #F0F0F0;
+    }
+    QListWidget {
+        background-color: #fff;
+        border: 1px solid #ddd;
+    }
+        """)  # Your existing stylesheet here
 
     def initUI(self):
         # Create main layout
@@ -1288,17 +1317,12 @@ class TutorialWindow(QDialog):
                     Add or Remove multiple players with ctrl + click or ctrl + A \r
                     Matches are made by grouping people based on their ELO Rating and then pairing them up.
                     Elo Rating adapts overtime based on the results of the matches""",
-            720, 480),
+            500, 480),
 
             ("Submit Scores", "Enter match results and click on the 'Submit Scores' button", 
             "submit_scores.gif", 
              "Tip: Ensure you have the correct players' scores before submitting.",
              720, 480),
-
-            ("View Leaderboard", "Check current rankings and export them to CSV.", 
-            "leaderboard.gif", 
-             "Tip: You can export the leaderboard to track player performance over time.",
-             720, 480)
         ]
         
         # Add each step to the scrollable layout
@@ -1325,7 +1349,9 @@ class TutorialWindow(QDialog):
             movie = QMovie(gif_name)
             gif_label.setMovie(movie)
             movie.start()
-            step_layout.addWidget(gif_label)
+            step_layout.addWidget(gif_label, alignment=Qt.AlignCenter)
+
+
 
             # Tip Section for each GIF
             tip_label = QLabel(tip_text)
@@ -1367,10 +1393,12 @@ class MainWindow(QMainWindow):
         self.schedule_session_dialog = None
         self.initUI()
         
+        
 
     def initUI(self):
         self.setWindowTitle('Badminton App')
         self.setGeometry(100, 100, 800, 600)
+        self.setWindowIcon(QIcon("badminton_icon.png"))
         # Apply custom styles to the window
         self.setStyleSheet("""
             QPushButton {
@@ -1404,6 +1432,7 @@ class MainWindow(QMainWindow):
 
         # Call the method to open the "generate match ups" interface
         self.open_create_matchup()
+        
         
 
     def open_manage_players(self):
