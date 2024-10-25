@@ -658,7 +658,7 @@ class ScheduleSessionDialog(QDialog):
         self.manage_players_button = QPushButton("Manage Players")
         self.view_leaderboard_button = QPushButton("View Leaderboard")
         self.view_match_history_button = QPushButton("View Match History")
-        self.tutorial_button = QPushButton('Show Tutorial')
+        self.tutorial_button = QPushButton('Tutorial')
         
         # Connect buttons to methods in the parent (MainWindow)
         self.manage_players_button.clicked.connect(parent.open_manage_players)
@@ -873,7 +873,11 @@ class ScheduleSessionDialog(QDialog):
                     else:
                         # Handle odd player by leaving them for singles
                         leftover_player = tier[i]
-                        bench_players.append(leftover_player)
+                        # Try to pair with the next tier
+                        if tier_index + 1 < num_tiers:
+                            tiers[tier_index + 1].append(leftover_player)
+                        else:
+                            bench_players.append(leftover_player)
                         print(f"Leftover Player in Tier {tier_index + 1}: {leftover_player}")
 
                 # Shuffle teams to randomize match pairings
@@ -905,47 +909,40 @@ class ScheduleSessionDialog(QDialog):
                     else:
                         # Handle odd player by leaving them on the bench
                         leftover_player = tier[i]
-                        bench_players.append(leftover_player)
+                        # Try to pair with the next tier
+                        if tier_index + 1 < num_tiers:
+                            tiers[tier_index + 1].append(leftover_player)
+                        else:
+                            bench_players.append(leftover_player)
                         print(f"Leftover Player on Bench in Tier {tier_index + 1}: {leftover_player}")
 
-            # After processing, if there are leftover players, move them to the next tier for matching
-            leftover_players = [player for player in tier if player not in matched_players]
-            if leftover_players:
-                if tier_index + 1 < num_tiers:
-                    # Move leftover players to the next tier
-                    next_tier = tiers[tier_index + 1]
-                    next_tier.extend(leftover_players)
-                    print(f"Transferring leftover players to Tier {tier_index + 2}: {leftover_players}")
+        # Step 2: Try to form additional doubles using bench players
+        while len(bench_players) >= 4:
+            # Take the first four players to form two teams for a doubles match
+            team_a = (bench_players.pop(0), bench_players.pop(0))
+            team_b = (bench_players.pop(0), bench_players.pop(0))
+            matches.append((team_a, team_b))
 
-        # Handle any remaining players on the bench after all tiers have been processed
-        if bench_players:
-            if match_type == 'Doubles':
-                # Pair leftover bench players into singles matches
-                for i in range(0, len(bench_players), 2):
-                    if i + 1 < len(bench_players):
-                        player_a = bench_players[i]
-                        player_b = bench_players[i + 1]
-                        matches.append((player_a, player_b))
-                    else:
-                        # Odd player left on the bench, print a message
-                        
-                        print(f"Odd player left on the bench: {bench_players[i]}")
+        # Step 3: Create singles matches if 3 or fewer players are left on the bench and fields are available
+        max_matches = self.num_fields
+
+        while len(bench_players) >= 2 and len(matches) < max_matches:
+            player_a = bench_players.pop(0)
+            player_b = bench_players.pop(0)
+            matches.append((player_a, player_b))
 
         # Shuffle matches for random assignment to fields
         random.shuffle(matches)
+
+        # Respect the maximum number of fields
+        if len(matches) > max_matches:
+            matches = matches[:max_matches]
 
         # Display which players are on the bench
         if bench_players:
             print(bench_players)
             bench_message = "Players on the bench:\n" + "\n".join(bench_players)
             QMessageBox.information(self, 'Bench Players', bench_message)
-
-        # Determine max matches based on number of fields
-        max_matches = self.num_fields
-
-        # Limit matches to max_matches
-        if len(matches) > max_matches:
-            matches = matches[:max_matches]
 
         # Assign matches to fields
         field_number = 1
@@ -1264,8 +1261,9 @@ class MatchHistoryWindow(QDialog):
 class TutorialWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("App Tutorial")
-        self.setGeometry(100, 100, 800, 600)
+        self.setWindowTitle("Tutorial")
+        self.setGeometry(100, 100, 800, 600)  
+        self.setWindowIcon(QIcon("badminton_icon.png"))
         self.initUI()
         self.setStyleSheet("""
             QPushButton {
