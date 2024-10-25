@@ -224,7 +224,7 @@ def get_match_history():
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT m.date, s.name,
+        SELECT m.date,
                 CASE
                     WHEN pa2.name IS NOT NULL THEN pa1.name || ' & ' || pa2.name
                     ELSE pa1.name
@@ -420,7 +420,7 @@ class ManagePlayersDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Manage Players')
-        self.setGeometry(150, 150, 700, 500)
+        self.setGeometry(150, 150, 500, 500)
         self.initUI()
 
 
@@ -493,6 +493,7 @@ class ManagePlayersDialog(QDialog):
         button_layout.addWidget(self.import_players_button)
         layout.addLayout(button_layout)
         self.setLayout(layout)
+        self.table.resizeColumnsToContents()
     
     def load_players(self):
         conn = sqlite3.connect(DATABASE)
@@ -642,7 +643,7 @@ class ScheduleSessionDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Generate Matchups')
-        self.setGeometry(100, 100, 900, 700)
+        self.setGeometry(100, 100, 700, 700)
         self.session_id = None
         self.initUI(parent)
         self.setWindowIcon(QIcon("badminton_icon.png"))
@@ -1040,6 +1041,7 @@ class ScheduleSessionDialog(QDialog):
                     field_number += 1
 
                 conn.commit()  # Commit all changes to the database
+                self.matchups_table.resizeColumnsToContents() # Adapt size of columns to length of text
 
         except sqlite3.Error as e:
             print(f"Database error: {e}")
@@ -1173,7 +1175,9 @@ class LeaderboardWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Leaderboard')
-        self.setGeometry(150, 150, 500, 400)
+        self.setGeometry(150, 150, 480, 450) 
+        self.setWindowFlags(Qt.Window)      
+        self.setWindowIcon(QIcon("badminton_icon.png"))
         self.initUI()
     
     def initUI(self):
@@ -1191,6 +1195,7 @@ class LeaderboardWindow(QDialog):
         layout.addWidget(self.export_button)
 
         self.setLayout(layout)
+        self.table.resizeColumnsToContents()
     
     def load_leaderboard(self):
         performance_data = get_performance_data()
@@ -1220,37 +1225,39 @@ class MatchHistoryWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Match History')
-        self.setGeometry(150, 150, 800, 500)
+        self.setGeometry(150, 150, 1000, 500)
+        self.setWindowIcon(QIcon("badminton_icon.png"))
+        self.setWindowFlags(self.windowFlags() | Qt.Window)
         self.initUI()
     
     def initUI(self):
         layout = QVBoxLayout()
 
         self.table = QTableWidget()
-        self.table.setColumnCount(9)
+        self.table.setColumnCount(8)
         self.table.setHorizontalHeaderLabels([
-            'Date', 'Session', 'Team A', 'Team B',
+            'Date', 'Team A', 'Team B',
             'Score A', 'Score B', 'Winner', 'Match Type', 'Field Number'
         ])
         self.load_match_history()
         layout.addWidget(self.table)
 
         self.setLayout(layout)
+        self.table.resizeColumnsToContents()
     
     def load_match_history(self):
         matches = get_match_history()
         self.table.setRowCount(len(matches))
         for row_idx, match in enumerate(matches):
-            date, session, teamA, teamB, ScoreA, ScoreB, Winners, MatchType, FieldNumber = match[:9]  # Adjust this line based on the actual number of values returned
+            date, teamA, teamB, ScoreA, ScoreB, Winners, MatchType, FieldNumber = match[:8]  # Adjust this line based on the actual number of values returned
             self.table.setItem(row_idx, 0, QTableWidgetItem(date))
-            self.table.setItem(row_idx, 1, QTableWidgetItem(session))
-            self.table.setItem(row_idx, 2, QTableWidgetItem(teamA))
-            self.table.setItem(row_idx, 3, QTableWidgetItem(teamB))
-            self.table.setItem(row_idx, 4, QTableWidgetItem(str(ScoreA)))
-            self.table.setItem(row_idx, 5, QTableWidgetItem(str(ScoreB)))
-            self.table.setItem(row_idx, 6, QTableWidgetItem(Winners if Winners else "N/A"))
-            self.table.setItem(row_idx, 7, QTableWidgetItem(MatchType))
-            self.table.setItem(row_idx, 8, QTableWidgetItem(str(FieldNumber) if FieldNumber else 'N/A'))
+            self.table.setItem(row_idx, 1, QTableWidgetItem(teamA))
+            self.table.setItem(row_idx, 2, QTableWidgetItem(teamB))
+            self.table.setItem(row_idx, 3, QTableWidgetItem(str(ScoreA)))
+            self.table.setItem(row_idx, 4, QTableWidgetItem(str(ScoreB)))
+            self.table.setItem(row_idx, 5, QTableWidgetItem(Winners if Winners else "N/A"))
+            self.table.setItem(row_idx, 6, QTableWidgetItem(MatchType))
+            self.table.setItem(row_idx, 7, QTableWidgetItem(str(FieldNumber) if FieldNumber else 'N/A'))
 
 
 
@@ -1305,7 +1312,7 @@ class TutorialWindow(QDialog):
             ("Manage Players", 
             "In the Manage Players menu, add players name and an estimation of their ELO Rating compared to the other players in your league", 
             "tutorial/add_players.gif", 
-            "Tip: You can remove multiple players with ctrl + click",
+            "Tip: You can select multiple players to remove with ctrl + click",
             720, 480),
 
             ("Schedule Matches", 
@@ -1317,12 +1324,13 @@ class TutorialWindow(QDialog):
                     Add or Remove multiple players with ctrl + click or ctrl + A \r
                     Matches are made by grouping people based on their ELO Rating and then pairing them up.
                     Elo Rating adapts overtime based on the results of the matches""",
-            500, 480),
+            480, 480),
 
-            ("Submit Scores", "Enter match results and click on the 'Submit Scores' button", 
-            "submit_scores.gif", 
-             "Tip: Ensure you have the correct players' scores before submitting.",
-             720, 480),
+            ("Submit Scores", 
+            "Enter match results and click on the 'Submit Scores' button", 
+            "tutorial/submit_scores.gif", 
+            "Tip: Ensure you have the correct players' scores before submitting.",
+             480, 480),
         ]
         
         # Add each step to the scrollable layout
