@@ -656,8 +656,8 @@ class ScheduleSessionDialog(QDialog):
         button_layout = QHBoxLayout()
         
         self.manage_players_button = QPushButton("Manage Players")
-        self.view_leaderboard_button = QPushButton("View Leaderboard")
-        self.view_match_history_button = QPushButton("View Match History")
+        self.view_leaderboard_button = QPushButton("Leaderboard")
+        self.view_match_history_button = QPushButton("Match History")
         self.tutorial_button = QPushButton('Tutorial')
         
         # Connect buttons to methods in the parent (MainWindow)
