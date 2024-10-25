@@ -936,12 +936,25 @@ class ScheduleSessionDialog(QDialog):
 
         # Respect the maximum number of fields
         if len(matches) > max_matches:
+            # Move extra teams or players to the bench
+            extra_matches = matches[max_matches:]
             matches = matches[:max_matches]
+            
+            for match in extra_matches:
+                if isinstance(match[0], tuple) and isinstance(match[1], tuple):
+                    # Double team match
+                    team_a, team_b = match
+                    bench_players.extend(team_a)
+                    bench_players.extend(team_b)
+                elif isinstance(match[0], str) and isinstance(match[1], str):
+                    # Singles match
+                    bench_players.append(match[0])
+                    bench_players.append(match[1])
 
         # Display which players are on the bench
         if bench_players:
             print(bench_players)
-            bench_message = "Players on the bench:\n" + "\n".join(bench_players)
+            bench_message = "Players on the bench:\n• " + "\n• ".join(bench_players)
             QMessageBox.information(self, 'Bench Players', bench_message)
 
         # Assign matches to fields
