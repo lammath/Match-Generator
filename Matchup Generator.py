@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
     QMenu, QSpinBox, QDialogButtonBox, QAbstractItemView, 
     QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QDialog,
     QScrollArea, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, 
-    QDialog, QToolTip, QFrame, QSpacerItem, QSizePolicy)
+    QDialog, QToolTip, QFrame, QSpacerItem, QSizePolicy, QWidget)
 
 from PyQt5.QtCore import Qt, QSize, QTimer
 from PyQt5.QtGui import QIcon, QPixmap, QMovie, QFont
@@ -639,39 +639,44 @@ class ImportPlayersDialog(QDialog):
              
 
 
-class ScheduleSessionDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
+class ScheduleSessionMainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
         self.setWindowTitle('Generate Matchups')
         self.setGeometry(100, 100, 700, 700)
         self.session_id = None
-        self.initUI(parent)
+        self.initUI()
         self.setWindowIcon(QIcon("badminton_icon.png"))
-        
 
-    def initUI(self, parent):
-        layout = QVBoxLayout()
+    def initUI(self):
+        # Central widget setup
+        central_widget = QWidget(self)
+        layout = QVBoxLayout(central_widget)
+        self.setCentralWidget(central_widget)
 
         # Add buttons at the top
         button_layout = QHBoxLayout()
-        
+
         self.manage_players_button = QPushButton("Manage Players")
         self.view_leaderboard_button = QPushButton("Leaderboard")
         self.view_match_history_button = QPushButton("Match History")
         self.tutorial_button = QPushButton('Tutorial')
-        
-        # Connect buttons to methods in the parent (MainWindow)
-        self.manage_players_button.clicked.connect(parent.open_manage_players)
-        self.view_leaderboard_button.clicked.connect(parent.open_leaderboard)
-        self.view_match_history_button.clicked.connect(parent.open_match_history)
-        self.tutorial_button.clicked.connect(parent.open_tutorial)
-        
+
+        # Add buttons to the layout
         button_layout.addWidget(self.manage_players_button)
         button_layout.addWidget(self.view_leaderboard_button)
         button_layout.addWidget(self.view_match_history_button)
         button_layout.addWidget(self.tutorial_button)
-        
+
+        # Connect buttons to their methods (now self-contained)
+        self.manage_players_button.clicked.connect(self.open_manage_players)
+        self.view_leaderboard_button.clicked.connect(self.open_leaderboard)
+        self.view_match_history_button.clicked.connect(self.open_match_history)
+        self.tutorial_button.clicked.connect(self.open_tutorial)
+
+        # Add the button layout to the main layout
         layout.addLayout(button_layout)
+
 
         form_layout = QFormLayout()
         
@@ -772,6 +777,60 @@ class ScheduleSessionDialog(QDialog):
         layout.addWidget(self.submit_scores_button)
 
         self.setLayout(layout)
+
+        self.setStyleSheet("""
+            QPushButton {
+        background-color: #4CAF50;
+        color: white;
+        border-radius: 5px;
+        padding: 8px 16px;
+        font-size: 14px;
+        }
+        QPushButton:hover {
+            background-color: #45a049;
+        }
+        QLabel, QLineEdit, QComboBox {
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            padding: 5px;
+        }
+        QTableWidget {
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            padding: 5px;
+        }
+        QMainWindow {
+            background-color: #F0F0F0;
+        }
+        QListWidget {
+            background-color: #fff;
+            border: 1px solid #ddd;
+        }
+            """)
+        
+
+    def open_manage_players(self):
+        manage_players_dialog = ManagePlayersDialog(self)
+        manage_players_dialog.exec_()
+
+    def open_leaderboard(self):
+        leaderboard_window = LeaderboardWindow(self)
+        leaderboard_window.exec_()
+
+    def open_match_history(self):
+        match_history_window = MatchHistoryWindow(self)
+        match_history_window.exec_()
+
+    def open_create_matchup(self):
+        if not self.schedule_session_dialog:
+            self.schedule_session_dialog = ScheduleSessionDialog(self)  # Create and store the instance
+        self.schedule_session_dialog.exec_()
+    
+    def open_tutorial(self):
+        self.tutorial_window = TutorialWindow()
+        self.tutorial_window.exec_()
+
+
 
     def filter_available_players(self):
         search_text = self.search_bar.text().lower()
@@ -1403,84 +1462,13 @@ class TutorialWindow(QDialog):
         self.close()
 
 
-
-
-# Main Application Window
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.schedule_session_dialog = None
-        self.initUI()
-        
-        
-
-    def initUI(self):
-        self.setWindowTitle('Badminton App')
-        self.setGeometry(100, 100, 800, 600)
-        self.setWindowIcon(QIcon("badminton_icon.png"))
-        # Apply custom styles to the window
-        self.setStyleSheet("""
-            QPushButton {
-        background-color: #4CAF50;
-        color: white;
-        border-radius: 5px;
-        padding: 8px 16px;
-        font-size: 14px;
-    }
-    QPushButton:hover {
-        background-color: #45a049;
-    }
-    QLabel, QLineEdit, QComboBox {
-        font-family: Arial, sans-serif;
-        font-size: 14px;
-        padding: 5px;
-    }
-    QTableWidget {
-        font-family: Arial, sans-serif;
-        font-size: 14px;
-        padding: 5px;
-    }
-    QMainWindow {
-        background-color: #F0F0F0;
-    }
-    QListWidget {
-        background-color: #fff;
-        border: 1px solid #ddd;
-    }
-        """)
-
-        # Call the method to open the "generate match ups" interface
-        self.open_create_matchup()
-        
-        
-
-    def open_manage_players(self):
-        manage_players_dialog = ManagePlayersDialog(self)
-        manage_players_dialog.exec_()
-
-    def open_leaderboard(self):
-        leaderboard_window = LeaderboardWindow(self)
-        leaderboard_window.exec_()
-
-    def open_match_history(self):
-        match_history_window = MatchHistoryWindow(self)
-        match_history_window.exec_()
-
-    def open_create_matchup(self):
-        if not self.schedule_session_dialog:
-            self.schedule_session_dialog = ScheduleSessionDialog(self)  # Create and store the instance
-        self.schedule_session_dialog.exec_()
-    
-    def open_tutorial(self):
-        self.tutorial_window = TutorialWindow()
-        self.tutorial_window.exec_()
   
 # Main Execution
 if __name__ == "__main__":
     init_db()
     app = QApplication(sys.argv)
-    window = MainWindow()
+    app.setWindowIcon(QIcon("badminton_icon.png"))
+    window = ScheduleSessionMainWindow()
     window.show()
-    window.close()
-    sys.exit()
+    sys.exit(app.exec_())
     
