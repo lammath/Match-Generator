@@ -556,9 +556,9 @@ class ManagePlayersDialog(QDialog):
             players = cursor.fetchall()
             conn.close()
             
-            # Reference the MainWindow's `schedule_session_dialog`
-            if self.parent().schedule_session_dialog:
-                self.parent().schedule_session_dialog.populate_available_players()
+            #Refresh list of available players
+            self.parent().populate_available_players()
+            
 
 class AddPlayerDialog(QDialog):
     def __init__(self, parent=None):
@@ -777,36 +777,11 @@ class ScheduleSessionMainWindow(QMainWindow):
         layout.addWidget(self.submit_scores_button)
 
         self.setLayout(layout)
-
-        self.setStyleSheet("""
-            QPushButton {
-        background-color: #4CAF50;
-        color: white;
-        border-radius: 5px;
-        padding: 8px 16px;
-        font-size: 14px;
-        }
-        QPushButton:hover {
-            background-color: #45a049;
-        }
-        QLabel, QLineEdit, QComboBox {
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            padding: 5px;
-        }
-        QTableWidget {
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            padding: 5px;
-        }
-        QMainWindow {
-            background-color: #F0F0F0;
-        }
-        QListWidget {
-            background-color: #fff;
-            border: 1px solid #ddd;
-        }
-            """)
+        
+        if QSysInfo.productType() == "osx":
+            self.setStyleSheet(mac_stylesheet)
+        else:
+            self.setStyleSheet(windows_stylesheet)
         
 
     def open_manage_players(self):
@@ -823,7 +798,7 @@ class ScheduleSessionMainWindow(QMainWindow):
 
     def open_create_matchup(self):
         if not self.schedule_session_dialog:
-            self.schedule_session_dialog = ScheduleSessionDialog(self)  # Create and store the instance
+            self.schedule_session_dialog = ScheduleSessionMainWindow(self)  # Create and store the instance
         self.schedule_session_dialog.exec_()
     
     def open_tutorial(self):
@@ -1461,6 +1436,229 @@ class TutorialWindow(QDialog):
     def finish_tutorial(self):
         self.close()
 
+
+
+from PyQt5.QtWidgets import QApplication
+from PyQt5.QtCore import QSysInfo
+import sys
+
+# Define the stylesheet
+mac_stylesheet = """
+/* Your stylesheet code here */
+QMainWindow {
+    background-color: #F0F0F0; /* Light gray background */
+}
+
+/* Button styling */
+QPushButton {
+    background-color: #4CAF50;
+    color: white;
+    border: 1px solid #A9A9A9; /* Subtle border for buttons */
+    border-radius: 5px;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-family: 'Segoe UI', sans-serif;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+QPushButton:hover {
+    background-color: #45a049; /* Slightly darker on hover */
+    transform: translateY(-2px); /* Adds a subtle hover lift */
+}
+
+QPushButton:pressed {
+    background-color: #3e8e41; /* Darker green for pressed state */
+    transform: translateY(0px);
+}
+
+/* Labels */
+QLabel {
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 14px;
+    color: #000000; /* Black text */
+}
+
+/* Text input fields */
+QLineEdit, QComboBox {
+    background-color: #FFFFFF;
+    color: #000000; /* Black text */
+    border: 1px solid #A9A9A9; /* Light gray border */
+    padding: 8px 10px;
+    border-radius: 5px;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 14px;
+}
+
+QLineEdit:focus, QComboBox:focus {
+    border-color: #4CAF50; /* Green focus border to match the button style */
+    background-color: #FFFFFF;
+}
+
+/* ComboBox drop-down list */
+QComboBox QAbstractItemView {
+    background-color: #FFFFFF;
+    selection-background-color: #4CAF50; /* Green highlight for selected item */
+    selection-color: #FFFFFF; /* White text for selected item */
+    border: 1px solid #A9A9A9;
+    color: #000000; /* Black text */
+}
+
+/* Tables */
+QTableWidget {
+    background-color: #F0F0F0; /* Match background with the main window */
+    border: 1px solid #A9A9A9;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 14px;
+    gridline-color: #D3D3D3; /* Light gray grid lines */
+    border-radius: 5px;
+    padding: 5px;
+    color: #000000; /* Black text */
+}
+
+QHeaderView::section {
+    background-color: #F0F0F0; /* Light gray header for a consistent look */
+    border: 1px solid #A9A9A9;
+    padding: 4px;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 14px;
+    color: #000000; /* Black text */
+}
+
+QHeaderView::separator {
+    background-color: #F0F0F0; /* Light gray for the separator between headers */
+    border: 1px solid #A9A9A9;
+    width: 2px; /* Adjusts the width of the separator for better visibility */
+}
+
+/* Adjusted selected item styling */
+QTableWidget::item {
+    padding: 5px;
+    background-color: #FFFFFF; /* White background for filled cells */
+    color: #000000; /* Black text */
+}
+
+QTableWidget::item:selected {
+    background-color: #4CAF50; /* Green selection for consistency */
+    color: #FFFFFF;
+}
+
+/* Empty spaces in tables */
+QTableCornerButton::section {
+    background-color: #F0F0F0; /* Make the corner button match the background */
+}
+
+QTableView {
+    background-color: #F0F0F0; /* Background of empty spaces */
+}
+
+/* List Widgets */
+QListWidget {
+    background-color: #FFFFFF;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 5px;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 14px;
+    color: #000000; /* Black text */
+}
+
+QListWidget::item {
+    padding: 8px;
+    border-radius: 3px;
+    color: #000000; /* Black text */
+}
+
+QListWidget::item:hover {
+    background-color: #f0f0f0; /* Light hover effect */
+}
+
+QListWidget::item:selected {
+    background-color: #4CAF50;
+    color: white;
+}
+
+/* QSpinBox */
+QSpinBox {
+    background-color: #FFFFFF;
+    color: #000000; /* Black text */
+    border: 1px solid #A9A9A9;
+    border-radius: 5px;
+    padding: 5px;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 14px;
+}
+
+QSpinBox::up-button, QSpinBox::down-button {
+    background-color: #F0F0F0;
+    border: 1px solid #A9A9A9;
+    subcontrol-origin: border;
+    subcontrol-position: top right; /* Aligns up and down buttons */
+    width: 16px;
+}
+
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+    background-color: #E5E5E5; /* Slightly darker on hover */
+}
+
+QSpinBox::up-arrow, QSpinBox::down-arrow {
+    width: 7px;
+    height: 7px;
+}
+
+/* Scrollbars */
+QScrollBar:vertical, QScrollBar:horizontal {
+    background-color: #F0F0F0;
+    border: 1px solid #A9A9A9;
+    width: 12px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+    background-color: #C0C0C0;
+    min-height: 20px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {
+    background-color: #A9A9A9;
+}
+
+QScrollBar::add-line, QScrollBar::sub-line {
+    background: none;
+}
+"""
+
+
+
+windows_stylesheet = """
+            QPushButton {
+        background-color: #4CAF50;
+        color: white;
+        border-radius: 5px;
+        padding: 8px 16px;
+        font-size: 14px;
+        }
+        QPushButton:hover {
+            background-color: #45a049;
+        }
+        QLabel, QLineEdit, QComboBox {
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            padding: 5px;
+        }
+        QTableWidget {
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            padding: 5px;
+        }
+        QMainWindow {
+            background-color: #F0F0F0;
+        }
+        QListWidget {
+            background-color: #fff;
+            border: 1px solid #ddd;
+        }
+            """
 
   
 # Main Execution
