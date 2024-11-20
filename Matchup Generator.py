@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
     QMenu, QSpinBox, QDialogButtonBox, QAbstractItemView, 
     QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QDialog,
     QScrollArea, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, 
-    QDialog, QToolTip, QFrame, QSpacerItem, QSizePolicy, QWidget)
+    QDialog, QToolTip, QFrame, QSpacerItem, QSizePolicy)
 
 from PyQt5.QtCore import Qt, QSize, QTimer
 from PyQt5.QtGui import QIcon, QPixmap, QMovie, QFont
@@ -556,9 +556,9 @@ class ManagePlayersDialog(QDialog):
             players = cursor.fetchall()
             conn.close()
             
-            #Refresh list of available players
-            self.parent().populate_available_players()
-            
+            # Reference the MainWindow's `schedule_session_dialog`
+            if self.parent().schedule_session_dialog:
+                self.parent().schedule_session_dialog.populate_available_players()
 
 class AddPlayerDialog(QDialog):
     def __init__(self, parent=None):
@@ -639,44 +639,39 @@ class ImportPlayersDialog(QDialog):
              
 
 
-class ScheduleSessionMainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
+class ScheduleSessionDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
         self.setWindowTitle('Generate Matchups')
         self.setGeometry(100, 100, 700, 700)
         self.session_id = None
-        self.initUI()
+        self.initUI(parent)
         self.setWindowIcon(QIcon("badminton_icon.png"))
+        
 
-    def initUI(self):
-        # Central widget setup
-        central_widget = QWidget(self)
-        layout = QVBoxLayout(central_widget)
-        self.setCentralWidget(central_widget)
+    def initUI(self, parent):
+        layout = QVBoxLayout()
 
         # Add buttons at the top
         button_layout = QHBoxLayout()
-
+        
         self.manage_players_button = QPushButton("Manage Players")
         self.view_leaderboard_button = QPushButton("Leaderboard")
         self.view_match_history_button = QPushButton("Match History")
         self.tutorial_button = QPushButton('Tutorial')
-
-        # Add buttons to the layout
+        
+        # Connect buttons to methods in the parent (MainWindow)
+        self.manage_players_button.clicked.connect(parent.open_manage_players)
+        self.view_leaderboard_button.clicked.connect(parent.open_leaderboard)
+        self.view_match_history_button.clicked.connect(parent.open_match_history)
+        self.tutorial_button.clicked.connect(parent.open_tutorial)
+        
         button_layout.addWidget(self.manage_players_button)
         button_layout.addWidget(self.view_leaderboard_button)
         button_layout.addWidget(self.view_match_history_button)
         button_layout.addWidget(self.tutorial_button)
-
-        # Connect buttons to their methods (now self-contained)
-        self.manage_players_button.clicked.connect(self.open_manage_players)
-        self.view_leaderboard_button.clicked.connect(self.open_leaderboard)
-        self.view_match_history_button.clicked.connect(self.open_match_history)
-        self.tutorial_button.clicked.connect(self.open_tutorial)
-
-        # Add the button layout to the main layout
+        
         layout.addLayout(button_layout)
-
 
         form_layout = QFormLayout()
         
@@ -777,35 +772,6 @@ class ScheduleSessionMainWindow(QMainWindow):
         layout.addWidget(self.submit_scores_button)
 
         self.setLayout(layout)
-        
-        if QSysInfo.productType() == "osx":
-            self.setStyleSheet(mac_stylesheet)
-        else:
-            self.setStyleSheet(windows_stylesheet)
-        
-
-    def open_manage_players(self):
-        manage_players_dialog = ManagePlayersDialog(self)
-        manage_players_dialog.exec_()
-
-    def open_leaderboard(self):
-        leaderboard_window = LeaderboardWindow(self)
-        leaderboard_window.exec_()
-
-    def open_match_history(self):
-        match_history_window = MatchHistoryWindow(self)
-        match_history_window.exec_()
-
-    def open_create_matchup(self):
-        if not self.schedule_session_dialog:
-            self.schedule_session_dialog = ScheduleSessionMainWindow(self)  # Create and store the instance
-        self.schedule_session_dialog.exec_()
-    
-    def open_tutorial(self):
-        self.tutorial_window = TutorialWindow()
-        self.tutorial_window.exec_()
-
-
 
     def filter_available_players(self):
         search_text = self.search_bar.text().lower()
@@ -1168,6 +1134,9 @@ class ScheduleSessionMainWindow(QMainWindow):
 
         # Update Elo ratings based on the submitted scores
         self.update_elo_ratings()
+        
+        # Refresh the assigned players list with updated rankings
+        self.refresh_assigned_players()
 
         QMessageBox.information(self, 'Success', 'Scores submitted and records updated successfully.')
 
@@ -1213,6 +1182,23 @@ class ScheduleSessionMainWindow(QMainWindow):
                 update_elo(player_a1_id, player_a2_id, player_b1_id, player_b2_id, winner1_id, winner2_id, session_id=None, match_type=match_type, field_number=field_number)
 
         conn.close()
+    
+    def refresh_assigned_players(self):
+        """Refresh the assigned players list with updated ELO rankings."""
+        players = []
+        for i in range(self.assigned_list.count()):
+            item = self.assigned_list.item(i)
+            player_name = item.text().split(" (")[0]  # Extract player name
+            elo = self.assigned_list.get_player_elo_rating(player_name)
+            players.append((player_name, elo))
+
+        # Sort players by ELO in descending order
+        players.sort(key=lambda x: x[1], reverse=True)
+
+        # Clear and repopulate the assigned list
+        self.assigned_list.clear()
+        for player_name, elo in players:
+            self.assigned_list.addItem(f"{player_name} ({int(elo)})")
 
 
 class LeaderboardWindow(QDialog):
@@ -1438,235 +1424,83 @@ class TutorialWindow(QDialog):
 
 
 
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import QSysInfo
-import sys
 
-# Define the stylesheet
-mac_stylesheet = """
-/* Your stylesheet code here */
-QMainWindow {
-    background-color: #F0F0F0; /* Light gray background */
-}
+# Main Application Window
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.schedule_session_dialog = None
+        self.initUI()
+        
+        
 
-/* Button styling */
-QPushButton {
-    background-color: #4CAF50;
-    color: white;
-    border: 1px solid #A9A9A9; /* Subtle border for buttons */
-    border-radius: 5px;
-    padding: 8px 16px;
-    font-size: 14px;
-    font-family: 'Segoe UI', sans-serif;
-    transition: background-color 0.3s ease, transform 0.2s ease;
-}
-
-QPushButton:hover {
-    background-color: #45a049; /* Slightly darker on hover */
-    transform: translateY(-2px); /* Adds a subtle hover lift */
-}
-
-QPushButton:pressed {
-    background-color: #3e8e41; /* Darker green for pressed state */
-    transform: translateY(0px);
-}
-
-/* Labels */
-QLabel {
-    font-family: 'Segoe UI', sans-serif;
-    font-size: 14px;
-    color: #000000; /* Black text */
-}
-
-/* Text input fields */
-QLineEdit, QComboBox {
-    background-color: #FFFFFF;
-    color: #000000; /* Black text */
-    border: 1px solid #A9A9A9; /* Light gray border */
-    padding: 8px 10px;
-    border-radius: 5px;
-    font-family: 'Segoe UI', sans-serif;
-    font-size: 14px;
-}
-
-QLineEdit:focus, QComboBox:focus {
-    border-color: #4CAF50; /* Green focus border to match the button style */
-    background-color: #FFFFFF;
-}
-
-/* ComboBox drop-down list */
-QComboBox QAbstractItemView {
-    background-color: #FFFFFF;
-    selection-background-color: #4CAF50; /* Green highlight for selected item */
-    selection-color: #FFFFFF; /* White text for selected item */
-    border: 1px solid #A9A9A9;
-    color: #000000; /* Black text */
-}
-
-/* Tables */
-QTableWidget {
-    background-color: #F0F0F0; /* Match background with the main window */
-    border: 1px solid #A9A9A9;
-    font-family: 'Segoe UI', sans-serif;
-    font-size: 14px;
-    gridline-color: #D3D3D3; /* Light gray grid lines */
-    border-radius: 5px;
-    padding: 5px;
-    color: #000000; /* Black text */
-}
-
-QHeaderView::section {
-    background-color: #F0F0F0; /* Light gray header for a consistent look */
-    border: 1px solid #A9A9A9;
-    padding: 4px;
-    font-family: 'Segoe UI', sans-serif;
-    font-size: 14px;
-    color: #000000; /* Black text */
-}
-
-QHeaderView::separator {
-    background-color: #F0F0F0; /* Light gray for the separator between headers */
-    border: 1px solid #A9A9A9;
-    width: 2px; /* Adjusts the width of the separator for better visibility */
-}
-
-/* Adjusted selected item styling */
-QTableWidget::item {
-    padding: 5px;
-    background-color: #FFFFFF; /* White background for filled cells */
-    color: #000000; /* Black text */
-}
-
-QTableWidget::item:selected {
-    background-color: #4CAF50; /* Green selection for consistency */
-    color: #FFFFFF;
-}
-
-/* Empty spaces in tables */
-QTableCornerButton::section {
-    background-color: #F0F0F0; /* Make the corner button match the background */
-}
-
-QTableView {
-    background-color: #F0F0F0; /* Background of empty spaces */
-}
-
-/* List Widgets */
-QListWidget {
-    background-color: #FFFFFF;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    padding: 5px;
-    font-family: 'Segoe UI', sans-serif;
-    font-size: 14px;
-    color: #000000; /* Black text */
-}
-
-QListWidget::item {
-    padding: 8px;
-    border-radius: 3px;
-    color: #000000; /* Black text */
-}
-
-QListWidget::item:hover {
-    background-color: #f0f0f0; /* Light hover effect */
-}
-
-QListWidget::item:selected {
-    background-color: #4CAF50;
-    color: white;
-}
-
-/* QSpinBox */
-QSpinBox {
-    background-color: #FFFFFF;
-    color: #000000; /* Black text */
-    border: 1px solid #A9A9A9;
-    border-radius: 5px;
-    padding: 5px;
-    font-family: 'Segoe UI', sans-serif;
-    font-size: 14px;
-}
-
-QSpinBox::up-button, QSpinBox::down-button {
-    background-color: #F0F0F0;
-    border: 1px solid #A9A9A9;
-    subcontrol-origin: border;
-    subcontrol-position: top right; /* Aligns up and down buttons */
-    width: 16px;
-}
-
-QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-    background-color: #E5E5E5; /* Slightly darker on hover */
-}
-
-QSpinBox::up-arrow, QSpinBox::down-arrow {
-    width: 7px;
-    height: 7px;
-}
-
-/* Scrollbars */
-QScrollBar:vertical, QScrollBar:horizontal {
-    background-color: #F0F0F0;
-    border: 1px solid #A9A9A9;
-    width: 12px;
-    margin: 0px;
-}
-
-QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
-    background-color: #C0C0C0;
-    min-height: 20px;
-    border-radius: 5px;
-}
-
-QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {
-    background-color: #A9A9A9;
-}
-
-QScrollBar::add-line, QScrollBar::sub-line {
-    background: none;
-}
-"""
-
-
-
-windows_stylesheet = """
+    def initUI(self):
+        self.setWindowTitle('Badminton App')
+        self.setGeometry(100, 100, 800, 600)
+        self.setWindowIcon(QIcon("badminton_icon.png"))
+        # Apply custom styles to the window
+        self.setStyleSheet("""
             QPushButton {
         background-color: #4CAF50;
         color: white;
         border-radius: 5px;
         padding: 8px 16px;
         font-size: 14px;
-        }
-        QPushButton:hover {
-            background-color: #45a049;
-        }
-        QLabel, QLineEdit, QComboBox {
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            padding: 5px;
-        }
-        QTableWidget {
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            padding: 5px;
-        }
-        QMainWindow {
-            background-color: #F0F0F0;
-        }
-        QListWidget {
-            background-color: #fff;
-            border: 1px solid #ddd;
-        }
-            """
+    }
+    QPushButton:hover {
+        background-color: #45a049;
+    }
+    QLabel, QLineEdit, QComboBox {
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        padding: 5px;
+    }
+    QTableWidget {
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        padding: 5px;
+    }
+    QMainWindow {
+        background-color: #F0F0F0;
+    }
+    QListWidget {
+        background-color: #fff;
+        border: 1px solid #ddd;
+    }
+        """)
 
+        # Call the method to open the "generate match ups" interface
+        self.open_create_matchup()
+        
+        
+
+    def open_manage_players(self):
+        manage_players_dialog = ManagePlayersDialog(self)
+        manage_players_dialog.exec_()
+
+    def open_leaderboard(self):
+        leaderboard_window = LeaderboardWindow(self)
+        leaderboard_window.exec_()
+
+    def open_match_history(self):
+        match_history_window = MatchHistoryWindow(self)
+        match_history_window.exec_()
+
+    def open_create_matchup(self):
+        if not self.schedule_session_dialog:
+            self.schedule_session_dialog = ScheduleSessionDialog(self)  # Create and store the instance
+        self.schedule_session_dialog.exec_()
+    
+    def open_tutorial(self):
+        self.tutorial_window = TutorialWindow()
+        self.tutorial_window.exec_()
   
 # Main Execution
 if __name__ == "__main__":
     init_db()
     app = QApplication(sys.argv)
-    app.setWindowIcon(QIcon("badminton_icon.png"))
-    window = ScheduleSessionMainWindow()
+    window = MainWindow()
     window.show()
-    sys.exit(app.exec_())
+    window.close()
+    sys.exit()
     
