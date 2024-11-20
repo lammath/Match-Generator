@@ -1,4 +1,5 @@
 import sys
+import os
 import sqlite3
 import csv
 import random
@@ -1385,7 +1386,10 @@ class TutorialWindow(QDialog):
             gif_label.setScaledContents(True)  # Enable scaling of the contents
             gif_label.setFixedSize(gif_width, gif_length)  # Set a fixed size for the label
             gif_label.setAlignment(Qt.AlignCenter)
-            movie = QMovie(gif_name)
+
+            base_dir = os.path.dirname(os.path.abspath(__file__))  # Get the directory of the script
+            gif_path = os.path.join(base_dir, "tutorial", "add_players.gif")
+            movie = QMovie(gif_path)
             gif_label.setMovie(movie)
             movie.start()
             step_layout.addWidget(gif_label, alignment=Qt.AlignCenter)
